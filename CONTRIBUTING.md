@@ -7,7 +7,7 @@ Thanks for helping. armux is a Windows on ARM64 project. Most of this guide is a
 1. **No cmux code.** cmux is GPL-3.0-or-later and armux is MIT. Do not copy, paste or translate cmux source, assets or screenshots. Build from cmux's public docs and observed behavior. If you have read cmux's source for a feature, say so in the PR so a reviewer can check the result is an independent implementation.
 2. **Every UI element traces to a cmux feature.** Link the cmux README or docs section in your PR. Windows-specific differences go in [ARCHITECTURE.md, section 9](ARCHITECTURE.md#9-windows-deviations).
 3. **Memory is a feature.** UI or runtime changes include before and after numbers from `scripts/measure-memory.ps1`.
-4. **Dependencies are rare.** Only MIT, Apache-2.0, BSD, Unicode-3.0 or Zlib licenses, including transitive dependencies. Add each one to the [dependency register](ARCHITECTURE.md#10-dependency-register) with a reason. Prefer the standard library or a few lines of code over a crate.
+4. **Dependencies are rare.** Only MIT, Apache-2.0, BSD, Unicode-3.0 or Zlib licenses, including transitive dependencies. Add each one to the [dependency register](ARCHITECTURE.md#10-dependency-register) with a reason. Prefer the base class library or a few lines of code over a package.
 5. **ARM64 only.** No macOS, Linux or x64 targets.
 
 ## Setup
@@ -16,31 +16,39 @@ You need a Windows 11 ARM64 device. Check each tool is the **ARM64** build.
 
 | Tool | Install | Check |
 |---|---|---|
-| Visual Studio 2022 or 2026 (Community or Build Tools) | Workload "Desktop development with C++", plus components **MSVC ARM64 build tools** and **Windows 11 SDK** | `link.exe` from `VC\Tools\MSVC\*\bin\Hostarm64\arm64` |
-| Rust via rustup | Download `rustup-init.exe` for **aarch64** from [rustup.rs](https://rustup.rs) | `rustc -vV` shows `host: aarch64-pc-windows-msvc` |
+| .NET 10 SDK (ARM64) | `winget install Microsoft.DotNet.SDK.10` | `dotnet --info` shows `RID: win-arm64` |
+| Windows App Runtime 1.8 | Usually already present on Windows 11; otherwise install the 1.8 runtime from Microsoft | `Get-AppxPackage *WindowsAppRuntime.1.8*` lists an Arm64 package |
+| Visual Studio 2022 or 2026 (Community or Build Tools) | Workload "Desktop development with C++", plus **MSVC ARM64 build tools** and **Windows 11 SDK**. Needed for the NativeAOT release build only. | `C:\Program Files (x86)\Windows Kits\10\Lib\<version>\um\arm64\kernel32.lib` exists |
 | Git | [git-scm.com](https://git-scm.com) (ARM64 installer) | `git --version` |
 | PowerShell 7 | `winget install Microsoft.PowerShell` | `$PSVersionTable.PSVersion` |
-| Node.js LTS (Phase 2 onward) | ARM64 installer from [nodejs.org](https://nodejs.org) | `node -p process.arch` prints `arm64` |
 
-The toolchain version is pinned in `rust-toolchain.toml`. rustup installs it on first build.
+The SDK version is pinned by `global.json`, and `nuget.config` points at nuget.org.
 
 Then:
 
 ```powershell
 git clone https://github.com/apaslam09/armux
 cd armux
-cargo fmt --check
-cargo clippy --target aarch64-pc-windows-msvc -- -D warnings
-cargo build --release --target aarch64-pc-windows-msvc
-pwsh scripts/check-pe-arm64.ps1 target/aarch64-pc-windows-msvc/release/armux.exe
+dotnet test --project tests/Armux.Core.Tests
+dotnet build src/Armux.App -c Release -p:Platform=ARM64     # fast JIT build for development
+src\Armux.App\bin\ARM64\Release\net10.0-windows10.0.26100.0\win-arm64\ArmuxApp.exe
+
+# Release build (NativeAOT), the one memory numbers are reported for:
+$env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
+dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publish
+pwsh scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe
 ```
+
+Useful launch flags for UI work: `--scenario demo|idle|panes|browser`, `--panes N`, `--theme light`, `--palette`, `--notifications`, `--zoom`, `--select N` (see `src/Armux.App/LaunchOptions.cs`). `scripts/screenshot.ps1` captures the window, and `scripts/bench.ps1` measures start-up and memory.
 
 ### Common ARM64 traps
 
-- **`linker link.exe not found`, or `LNK1181: cannot open input file 'kernel32.lib'`.** Usually the Windows SDK is missing, even when the MSVC ARM64 tools are installed. rustc only finds `link.exe` automatically once the SDK is present. Check that `C:\Program Files (x86)\Windows Kits\10\Lib\<version>\um\arm64\kernel32.lib` exists.
+- **`LNK1181: cannot open input file 'kernel32.lib'` during `dotnet publish`.** The Windows SDK is missing, even when the MSVC ARM64 tools are installed. Check that `C:\Program Files (x86)\Windows Kits\10\Lib\<version>\um\arm64\kernel32.lib` exists.
 - **Visual Studio says the SDK is installed but the folder is empty.** The installer's record is stale, so "Modify" does nothing. Install the standalone SDK instead: `winget install --id Microsoft.WindowsSDK.10.0.26100 -e`.
-- **x64 Node.js.** An x64 Node under emulation installs x64 native modules, which then fail to load or run slowly. Check `node -p process.arch`.
-- **x64 rustup host.** An x64 rustup builds x64 by default and runs the compiler under emulation. Reinstall with the aarch64 `rustup-init.exe`.
+- **`'vswhere.exe' is not recognized` during `dotnet publish`.** The NativeAOT linker step finds MSVC through vswhere. Put `C:\Program Files (x86)\Microsoft Visual Studio\Installer` on `PATH` first, as shown above.
+- **`NETSDK1102` when publishing.** NativeAOT needs a self-contained publish. The project sets this automatically for `dotnet publish`; don't pass `--self-contained false`.
+- **`dotnet test` fails with "Testing with VSTest target is no longer supported".** Use `dotnet test --project ...`; `global.json` opts in to Microsoft.Testing.Platform.
+- **`Armux.Core.dll` reports machine `0x014C`.** It's an IL-only (AnyCPU) library and runs as ARM64. Only the AOT `ArmuxApp.exe` is checked.
 - **ARM64EC is not ARM64.** ARM64EC binaries report machine type `0x8664`. The PE check rejects them on purpose.
 - **Task Manager** can confirm a running process: Details tab, add the Architecture column.
 
@@ -57,7 +65,7 @@ Good areas for a first contribution:
 - Docs: setup steps for other ARM64 devices (Snapdragon X Elite, Windows Dev Kit 2023, Parallels on Apple silicon).
 - `scripts/measure-memory.ps1`: more process categories, CSV output, comparing two runs.
 - CI: caching, artifact naming, job summaries.
-- Phase 2 onward: one UI component at a time, each mapped to a cmux feature.
+- UI: one component at a time, each mapped to a cmux feature (see the traceability table in ARCHITECTURE.md).
 
 ## Commits and pull requests
 

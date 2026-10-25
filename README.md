@@ -4,32 +4,37 @@ A terminal workspace app for **Windows 11 on ARM64**, modeled on [cmux](https://
 
 [![ci](https://github.com/apaslam09/armux/actions/workflows/ci.yml/badge.svg)](https://github.com/apaslam09/armux/actions/workflows/ci.yml)
 
-> **Status: Phase 1 (repository setup).** No usable app yet. The UI arrives in Phase 2 and real shells in Phase 3. See the [roadmap](ARCHITECTURE.md#roadmap).
+> **Status: Phase 2 (UI on mock data).** The full cmux-style interface runs, but terminals show mock text. Real shells (PowerShell, cmd, WSL through ConPTY), OSC notifications and the `armux` CLI arrive in Phase 3. See the [roadmap](ARCHITECTURE.md#roadmap).
+
+![armux demo, dark theme](docs/screenshots/01-demo-dark.png)
 
 ## Why
 
-- **Native ARM64.** Built for `aarch64-pc-windows-msvc`. CI checks that every release binary has PE machine type `0xAA64`, so it never runs under x64 emulation.
-- **cmux's UI and model.** The same Window > Workspace > Pane > Surface hierarchy, the same features and a shortcut layout mapped to Windows. Every UI element traces to a cmux feature ([traceability table](ARCHITECTURE.md#5-feature-traceability)).
-- **Measured memory.** Memory has a budget per scenario, and the measurement script is in the repo. Numbers get published with each phase, including the ones that miss.
+- **Native ARM64.** Built with WinUI 3 and published as NativeAOT for `win-arm64`. CI checks the release binary has PE machine type `0xAA64`, so it never runs under x64 emulation.
+- **cmux's UI and model.** The same Window > Workspace > Pane > Surface hierarchy, workspace colors, notification rings, command palette and a shortcut layout mapped to Windows. Every UI element traces to a cmux feature ([traceability table](ARCHITECTURE.md#5-feature-traceability)).
+- **Measured memory.** Idle on a Surface Laptop 7: about 95 MB working set, 47 MB private and 25 MB in Task Manager, starting in 156 ms. Numbers for every scenario, including the browser panel, are in [ARCHITECTURE.md](ARCHITECTURE.md#7-memory-budget), with the scripts to reproduce them.
 
-## Planned features
+## Features
 
-| Feature | Phase |
+| Feature | Status |
 |---|---|
-| Vertical sidebar of workspaces with status and unread badges | 2 |
-| Per-pane tab bar, split right / down, resize, zoom | 2 |
-| Command palette (`Ctrl+Shift+P`) | 2 |
-| Notification rings and notification panel | 2 |
-| Dark and light themes | 2 |
-| Built-in browser panel (WebView2), loaded lazily and suspended when hidden | 2 to 3 |
-| PowerShell 7, cmd and WSL through ConPTY | 3 |
-| OSC 9 / 99 / 777 notification detection | 3 |
-| `armux notify` CLI | 3 |
+| Vertical sidebar: workspace title, latest notification, branch · directory, ports, PR, unread badge | Done (mock data) |
+| Workspace colors (17 presets or custom) shown as a left rail or underline; pinned workspaces | Done |
+| Per-pane tab bars, split right / down, drag to resize, zoom, equalize | Done |
+| Command palette (`Ctrl+Shift+P`) with inline shortcuts and workspace switching | Done |
+| Notification rings, tab dots, bell with unread count, notification panel, jump to latest unread | Done (simulated notifications) |
+| Built-in browser panel (WebView2): lazy, suspended when hidden, at most 2 live, fully released when closed | Done (mock page) |
+| Dark and light themes | Done |
+| PowerShell 7, cmd and WSL through ConPTY | Phase 3 |
+| OSC 9 / 99 / 777 notification detection, Windows toasts | Phase 3 |
+| `armux notify` CLI and named-pipe API | Phase 3 |
+
+More screenshots: [command palette](docs/screenshots/02-command-palette.png), [notifications](docs/screenshots/03-notifications.png), [workspace colors](docs/screenshots/05-workspace-colors.png), [zoomed pane](docs/screenshots/06-zoomed-pane.png), [light theme](docs/screenshots/07-light-theme.png), [four-pane grid](docs/screenshots/08-four-pane-grid.png).
 
 ## Requirements
 
 - Windows 11 on ARM64 (developed on a Surface Laptop 7, Snapdragon X Plus)
-- WebView2 Runtime (preinstalled on Windows 11)
+- Windows App Runtime 1.8 and the WebView2 Runtime (both usually preinstalled on Windows 11)
 
 ## Build from source
 
@@ -38,21 +43,23 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#setup) for the full setup. In short:
 ```powershell
 git clone https://github.com/apaslam09/armux
 cd armux
-cargo build --release --target aarch64-pc-windows-msvc
-pwsh scripts/check-pe-arm64.ps1 target/aarch64-pc-windows-msvc/release/armux.exe
+dotnet test --project tests/Armux.Core.Tests
+dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publish
+publish\ArmuxApp.exe
 ```
 
 ## Measuring memory
 
 ```powershell
-pwsh scripts/measure-memory.ps1 -Name armux
+./scripts/measure-memory.ps1 -Name ArmuxApp
+./scripts/bench.ps1 -Exe publish/ArmuxApp.exe -ArgumentList '--scenario','idle'
 ```
 
-This sums working set and private bytes across `armux.exe` and every process it starts (WebView2, ConPTY hosts, shells). It reports app cost and shell cost separately. The method and budget are in [ARCHITECTURE.md](ARCHITECTURE.md#7-memory-budget).
+`measure-memory.ps1` sums working set, private bytes and Task Manager memory across the app and every process it starts (WebView2, ConPTY hosts, shells), and reports app cost and shell cost separately. `bench.ps1` adds cold-start time.
 
 ## Relationship to cmux
 
-armux is an independent project, not affiliated with Manaflow. cmux is GPL-3.0-or-later and armux is MIT, so armux contains **no cmux source code**. It is reimplemented from cmux's public docs and observed behavior. See [ARCHITECTURE.md](ARCHITECTURE.md#3-cmux-license-decision).
+armux is an independent project, not affiliated with Manaflow. cmux is GPL-3.0-or-later and armux is MIT, so armux contains **no cmux source code or assets**. It is reimplemented from cmux's public docs and screenshots. See [ARCHITECTURE.md](ARCHITECTURE.md#3-cmux-license-decision).
 
 ## Contributing
 
