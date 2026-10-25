@@ -47,8 +47,7 @@ body:
       label: ARM64 notes
       description: Anything ARM-specific, such as dependencies without ARM64 builds, x64 emulation traps, or WebView2 behavior on Snapdragon GPUs.
       value: |
-        - Build with the native toolchain: `rustup show` should list host `aarch64-pc-windows-msvc`.
-        - Use an ARM64 Node.js build. An x64 Node under emulation installs x64 native modules.
+        - Use the ARM64 .NET SDK: `dotnet --info` should show `RID: win-arm64`.
         - No ARM64 device? Push to a fork. CI builds and verifies the binary on a native ARM64 runner.
 
   - type: input

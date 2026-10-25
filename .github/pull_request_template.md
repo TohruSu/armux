@@ -9,7 +9,7 @@
 ## Checklist
 
 - [ ] Title follows [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, ...)
-- [ ] `cargo fmt --check` and `cargo clippy -- -D warnings` pass
+- [ ] `dotnet test --project tests/Armux.Core.Tests` passes and `dotnet build` has no new warnings
 - [ ] No code copied from cmux (GPL-3.0-or-later). See CONTRIBUTING.md
 - [ ] New dependencies (including transitive ones) are MIT, Apache-2.0, BSD, Unicode-3.0 or Zlib, and are listed with a reason in ARCHITECTURE.md
 - [ ] UI or runtime change: memory measured before and after with `scripts/measure-memory.ps1` (paste below)
