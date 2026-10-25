@@ -1,6 +1,6 @@
 # armux architecture
 
-Status: **Phase 1, repository setup.** Sections marked _Phase 2_ or _Phase 3_ are plans. They will be replaced by measured results when those phases run. Nothing in this file claims a measured number unless it shows the command and date used to measure it.
+Status: **Phase 2, stack selection.** Spike measurements are in section 6; the recommendation awaits maintainer approval. Sections marked _Phase 2_ or _Phase 3_ are plans. They will be replaced by measured results when those phases run. Nothing in this file claims a measured number unless it shows the command and date used to measure it.
 
 ## 1. Scope
 
@@ -94,18 +94,48 @@ Electron is excluded. It ships its own Chromium, so its baseline sits above ever
 
 Key tradeoff: with A, the WebView2 process group (browser, GPU, renderer, utility) is part of the idle baseline. With B or C, idle is lower, and the same WebView2 group starts only when the first browser panel opens. With the browser open, all three converge, because all three use WebView2 for the browser panel.
 
-### Evaluation plan (_Phase 2_)
+### Spike results (measured 2026-10-25)
 
-Each candidate gets a minimal spike: one window, a sidebar, one terminal-shaped panel rendering static text, and one optional WebView2 browser panel. Release build, ARM64, same machine. Each spike is measured with `scripts/measure-memory.ps1`:
+**Setup.** Surface Laptop 7, Snapdragon X Plus, Qualcomm Adreno X1-85 GPU (driver 31.0.152.1), Windows 10.0.26200, WebView2 Runtime 155.0.4283.62, Rust 1.96.1, .NET SDK 8.0.426, Windows App Runtime 1.8. All spikes are ARM64 release builds (PE checked).
 
-| Metric | A | B | C |
-|---|---|---|---|
-| Idle working set / private (MB), browser closed | _Phase 2_ | _Phase 2_ | _Phase 2_ |
-| Same, browser open on a fixed local page | _Phase 2_ | _Phase 2_ | _Phase 2_ |
-| Cold start to first frame (ms, median of 10) | _Phase 2_ | _Phase 2_ | _Phase 2_ |
-| Release binary size (MB) | _Phase 2_ | _Phase 2_ | _Phase 2_ |
+**Spikes.** Each spike draws the same 1280×800 window: a sidebar with 5 workspace rows, a tab label and 40 lines of static monospace text. An optional browser panel shows the same fixed local HTML page in every spike. None of them has a terminal engine yet; that cost lands in Phase 3 for every stack alike. The spikes were throwaway code and are not in the repo.
 
-The recommendation goes here with the numbers. If no candidate meets the budget in section 7, Phase 2 stops and reports the options.
+- A: Tauri 2.12, UI as HTML in a child webview, browser as a second child webview (`unstable` feature).
+- B: `windows` 0.62 + `webview2-com` 0.39, Win32 window, Direct2D/DirectWrite drawing.
+- C: WinUI 3 (Windows App SDK 1.8), C#/.NET 8, framework-dependent, code-only UI, `WebView2` control.
+
+**Method.** `scripts/bench.ps1`. Start time is the median of 10 cold starts (after 1 discarded warm-up), from process creation to first presented frame. For B that is the first `EndDraw`, for A the UI page-load event, for C the first `CompositionTarget.Rendering`. Memory is app-attributable (section 7), the median of 5 samples after a 12 s settle. For "browser closed", the panel opens at launch, closes at 5 s, and memory is sampled at 70 s.
+
+Working set / private bytes in MB:
+
+| Scenario | B native, D2D software | B native, D2D hardware | A Tauri 2 | C WinUI 3 |
+|---|---|---|---|---|
+| Idle, browser never opened | **29.7 / 14.6** | 52.3 / 91.4 | 344.9 / 130.8 | 112.5 / 48.4 |
+| Browser panel open | 358.1 / 138.4 | not run | 416.8 / 158.3 | 441.5 / 174.3 |
+| Browser closed, 65 s later | 36.7–40.0 / 15.6–15.9 (2 runs) | not run | 370.7 / 132.4 | 121.5 / 50.0 |
+| Same, after working-set trim | 13.3 / 15.6 | — | — | — |
+| Processes idle / browser open | 1 / 7 | 1 / — | 7 / 8 | 1 / 7 |
+| Cold start, median of 10 | **82 ms** | 116 ms | 407 ms | 325 ms |
+| Shipped size | 226 KB exe | 226 KB exe | 3,089 KB exe | 130 KB exe + 37.2 MB folder, plus .NET 8 and Windows App Runtime installed separately |
+| Runtime crates / license status | 11, all MIT or Apache-2.0 | same | 128; MPL-2.0 `option-ext` at runtime (not allowed) | Windows App SDK under Microsoft Software License Terms (not allowed) |
+
+**Findings.**
+
+1. **The GPU driver is a fixed cost.** Creating a Direct2D hardware render target (a D3D device on the Adreno X1-85) adds about 23 MB working set, 77 MB private and 34 ms of startup to B. Every GPU-composited UI pays this. C pays it in-process. WebView2 pays it in its own GPU process: always for A, and for B and C only while a browser panel is open.
+2. **WebView2 is the largest cost.** The first browser panel adds 318–329 MB working set and 122–126 MB private in 6 processes for B and C. A pays most of that at idle, because its UI *is* a WebView2. A's second webview adds only one renderer (+54.9 / +18.7 MB).
+3. **Closing works for B and C.** Releasing the controller and environment makes every WebView2 process exit. In A the UI webview keeps the group alive.
+4. **Retained memory after close is mostly mapped pages.** B keeps +7% private and +24–35% working set after the browser closes. A working-set trim (`SetProcessWorkingSetSize(-1, -1)`) brings working set to 13.3 MB, below idle, but private bytes don't move. So private bytes is the honest retained-cost metric.
+5. **The WebView2 user data folder needs a short path.** C's default folder, next to the exe under a ~200-character path, failed with `0x80080005` (`CO_E_SERVER_EXEC_FAILURE`) a few seconds after start. Under `%LOCALAPPDATA%` it worked. armux puts it in `%LOCALAPPDATA%\armux\WebView2`.
+
+### Recommendation: B, Rust native
+
+Proposed for approval, not final until the maintainer signs off.
+
+- **Why B.** It is the only candidate that meets the idle budget (29.7 / 14.6 MB against ≤ 100 / ≤ 60), and it starts fastest (82 ms) with one process and a clean license tree. Its WebView2 cost appears only while a browser panel is open, and the panel can be closed to give memory back.
+- **Renderer.** Software Direct2D by default, with a hardware renderer behind a setting. Hardware rendering breaks the private-bytes budget on this GPU driver (91.4 MB). The risk is CPU cost for full-screen redraws at high refresh rates, so Phase 3 measures CPU use while scrolling. If software rendering is too expensive, hardware becomes the default and the private target is revised with the driver cost stated.
+- **Costs of B.** All UI is built by hand: layout, hit testing, focus, text input and IME (palette, rename), animations, and accessibility through UI Automation. This is the main schedule risk. It is kept small by a minimal retained widget layer written for exactly the cmux components in section 5, with no general-purpose toolkit.
+- **Why not A.** Idle is 3.4× the working-set target and 2.2× the private target. WebView2's browser, GPU and renderer processes alone exceed the private target. It also ships an MPL-2.0 crate, which isn't on the allowlist.
+- **Why not C.** Idle working set misses the target by 12.5%. The Windows App SDK license isn't on the allowlist, and users need the .NET and Windows App runtimes installed.
 
 ### Toolchain (Phase 1)
 
@@ -156,6 +186,16 @@ These show the per-pane cost floor (a ConPTY host) and why shells are reported s
 
 These targets are proposals. After the Phase 2 spikes they are either confirmed or revised in this file, with the reason. A missed target is reported with its cause, never hidden.
 
+### Status against the spikes (2026-10-25, recommended stack B with software rendering)
+
+| Target | Measured | Status |
+|---|---|---|
+| Idle ≤ 100 / ≤ 60 MB | 29.7 / 14.6 MB | Met |
+| Each additional terminal pane ≤ 20 / ≤ 8 MB | not measured; the spikes have no panes | Open (measured with the Phase 2 UI and again with ConPTY in Phase 3) |
+| Browser closed ≤ idle + 10% | private +7% (15.6 vs 14.6); working set +24–35% (36.7–40.0 vs 29.7) | **Private met, working set missed** |
+
+Cause of the working-set miss: after WebView2 shuts down, its loader and the system DLLs it touched stay mapped in armux's process. A working-set trim brings working set to 13.3 MB, but that only moves pages to the standby list. **Proposed revision:** judge the browser-closed target on private bytes and keep reporting working set. Pending maintainer approval.
+
 ### Browser panel policy (_Phase 2/3_)
 
 The browser panel is the largest memory risk, since each WebView2 environment adds its own process group.
@@ -164,8 +204,9 @@ The browser panel is the largest memory risk, since each WebView2 environment ad
 2. **One shared environment.** All browser panels share one `CoreWebView2Environment` (one browser and one GPU process; each panel adds a renderer).
 3. **Suspend when hidden.** A browser panel that is not visible calls `TrySuspend` and sets `MemoryUsageTargetLevel = Low`. It resumes on show.
 4. **Cap.** At most 2 live browser panels by default. Opening a third discards the least recently used one, keeping its URL so it reloads on focus.
-5. **Tear down.** When the last browser panel closes, the environment is released after 30 s, so memory returns to the idle baseline.
-6. **Measure** open, hidden (suspended) and closed, every release.
+5. **Tear down.** When the last browser panel closes, the environment is released after 30 s, so the WebView2 processes exit (verified in spike B). armux then trims its own working set once.
+6. **Short data path.** The user data folder is `%LOCALAPPDATA%\armux\WebView2`. A long default path broke WebView2 start-up in spike C (section 6, finding 5).
+7. **Measure** open, hidden (suspended) and closed, every release.
 
 ## 8. Keyboard shortcuts (_draft, finalized in Phase 2_)
 
@@ -225,7 +266,9 @@ Exceptions are marked with *.
 
 ## 10. Dependency register
 
-Every dependency is listed here with its license and why it is needed. Allowed licenses: MIT, Apache-2.0, BSD. Anything else stops for maintainer review.
+Every dependency is listed here with its license and why it is needed. Allowed licenses, direct and transitive: MIT, Apache-2.0, BSD (any clause count), Unicode-3.0 and Zlib. Unicode-3.0 and Zlib were added on 2026-10-25: both are permissive with no copyleft, and Unicode-3.0 appears in `unicode-ident`, which nearly every Rust proc-macro depends on. Anything else, including MPL-2.0 and proprietary SDK terms, stops for maintainer review.
+
+Check a dependency tree before adding it: `cargo metadata --format-version 1 --filter-platform aarch64-pc-windows-msvc`, then group the packages by `license`.
 
 | Dependency | Where | License | Why |
 |---|---|---|---|
