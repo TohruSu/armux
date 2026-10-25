@@ -77,15 +77,21 @@ $rootIds = if ($PSCmdlet.ParameterSetName -eq 'ById') { @($Id) } else {
 
 $runs = for ($i = 0; $i -lt $Samples; $i++) {
     if ($i) { Start-Sleep -Seconds $IntervalSeconds }
+    # Private working set is what Task Manager shows in its "Memory" column.
+    $pws = @{}
+    foreach ($c in Get-CimInstance Win32_PerfRawData_PerfProc_Process -Property IDProcess, WorkingSetPrivate) {
+        $pws[[int]$c.IDProcess] = $c.WorkingSetPrivate
+    }
     $rows = foreach ($p in Get-Tree $rootIds) {
         $gp = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
         if (-not $gp) { continue }
         [pscustomobject]@{
-            Pid       = $p.ProcessId
-            Name      = $p.Name
-            Category  = $p.Category
-            WorkingMB = [math]::Round($gp.WorkingSet64 / 1MB, 1)
-            PrivateMB = [math]::Round($gp.PrivateMemorySize64 / 1MB, 1)
+            Pid         = $p.ProcessId
+            Name        = $p.Name
+            Category    = $p.Category
+            WorkingMB   = [math]::Round($gp.WorkingSet64 / 1MB, 1)
+            PrivateMB   = [math]::Round($gp.PrivateMemorySize64 / 1MB, 1)
+            PrivateWSMB = [math]::Round(($pws[[int]$p.ProcessId] + 0) / 1MB, 1)
         }
     }
     , @($rows)
@@ -104,7 +110,13 @@ $summary = foreach ($cat in 'app', 'webview', 'conpty', 'shell', 'workload', 'to
     }
     $ws = foreach ($r in $runs) { ($r | Where-Object $pick | Measure-Object WorkingMB -Sum).Sum + 0 }
     $pv = foreach ($r in $runs) { ($r | Where-Object $pick | Measure-Object PrivateMB -Sum).Sum + 0 }
-    [pscustomobject]@{ Scope = $cat; WorkingMB = [math]::Round((Median $ws), 1); PrivateMB = [math]::Round((Median $pv), 1) }
+    $pw = foreach ($r in $runs) { ($r | Where-Object $pick | Measure-Object PrivateWSMB -Sum).Sum + 0 }
+    [pscustomobject]@{
+        Scope       = $cat
+        WorkingMB   = [math]::Round((Median $ws), 1)
+        PrivateMB   = [math]::Round((Median $pv), 1)
+        PrivateWSMB = [math]::Round((Median $pw), 1)
+    }
 }
 
 if ($Json) {

@@ -8,7 +8,7 @@
   and are rejected on purpose: armux ships pure ARM64.
 
 .EXAMPLE
-  pwsh scripts/check-pe-arm64.ps1 target/aarch64-pc-windows-msvc/release/armux.exe
+  pwsh scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe
 #>
 param([Parameter(Mandatory, ValueFromRemainingArguments)] [string[]] $Path)
 
