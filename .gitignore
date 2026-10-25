@@ -9,3 +9,8 @@ dist/
 .vscode/
 .idea/
 /measurements/raw/
+bin/
+obj/
+*.user
+
+/publish/

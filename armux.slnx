@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Armux.App/Armux.App.csproj" />
+    <Project Path="src/Armux.Core/Armux.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Armux.Core.Tests/Armux.Core.Tests.csproj" />
+  </Folder>
+</Solution>
