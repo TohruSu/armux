@@ -26,7 +26,7 @@ jobs:
       CARGO_TERM_COLOR: always
       TARGET: aarch64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Assert native ARM64 runner
         run: |
@@ -48,7 +48,7 @@ jobs:
           rustc -vV
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -76,7 +76,7 @@ jobs:
           & "target/$env:TARGET/release/armux.exe" --version
           if ($LASTEXITCODE) { throw "armux.exe exited $LASTEXITCODE" }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: armux-aarch64-pc-windows-msvc
           path: target/aarch64-pc-windows-msvc/release/armux.exe

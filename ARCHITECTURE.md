@@ -229,8 +229,8 @@ Every dependency is listed here with its license and why it is needed. Allowed l
 
 | Dependency | Where | License | Why |
 |---|---|---|---|
-| `actions/checkout@v4` | CI | MIT | Check out the repo |
-| `actions/cache@v4` | CI | MIT | Cache cargo registry and `target/` |
-| `actions/upload-artifact@v4` | CI | MIT | Publish the ARM64 build |
+| `actions/checkout@v7` | CI | MIT | Check out the repo |
+| `actions/cache@v6` | CI | MIT | Cache cargo registry and `target/` |
+| `actions/upload-artifact@v7` | CI | MIT | Publish the ARM64 build |
 
 The Rust crate currently has zero dependencies.
