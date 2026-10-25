@@ -1,0 +1,545 @@
+using System.Collections.Specialized;
+using Armux.Core;
+using Layout = Armux.Core.Layout;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+
+namespace Armux.App;
+
+/// <summary>
+/// The armux window: title bar (sidebar toggle, notifications bell, new workspace, workspace title),
+/// the vertical workspace sidebar, and the split-pane area of the current workspace.
+/// </summary>
+public sealed partial class MainWindow : Window, IPaneHost
+{
+    const double SidebarWidth = 280;
+
+    readonly LaunchOptions opts;
+    readonly AppState state;
+    readonly BrowserHost browsers;
+    readonly Grid root = new();
+    readonly Grid titleRow = new();
+    readonly ColumnDefinition titleLeft = new();
+    readonly ColumnDefinition sidebarCol = new() { Width = new GridLength(SidebarWidth) };
+    readonly StackPanel sidebarList = new() { Padding = new Thickness(0, 4, 0, 12) };
+    readonly Grid content = new();
+    readonly Grid dragRegion = new();
+    readonly TextBlock titleText = new();
+    readonly Border bellBadge = new();
+    readonly TextBlock bellCount = new();
+    readonly CommandPalette palette = new();
+    Button bellButton = null!;
+    Flyout bellFlyout = null!;
+    readonly Dictionary<Pane, PaneView> paneViews = [];
+    readonly Dictionary<Surface, FrameworkElement> panels = [];
+    bool sidebarVisible = true;
+
+    public MainWindow(LaunchOptions opts)
+    {
+        this.opts = opts;
+        state = opts.BuildState();
+        browsers = new BrowserHost(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
+        Theme.Use(opts.Theme != "light");
+        Title = "armux";
+        ExtendsContentIntoTitleBar = true;
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(opts.Width, opts.Height));
+
+        BuildChrome();
+        RegisterCommands();
+        Content = root;
+        SetTitleBar(dragRegion);
+
+        state.Workspaces.CollectionChanged += (_, _) => DispatcherQueue.TryEnqueue(RenderSidebar);
+        state.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AppState.UnreadTotal)) DispatcherQueue.TryEnqueue(UpdateBell); };
+        ((INotifyCollectionChanged)state.Notifications).CollectionChanged += (_, _) => DispatcherQueue.TryEnqueue(UpdateBell);
+
+        RenderAll();
+        root.Loaded += (_, _) => OnFirstLoad();
+    }
+
+    // ---- chrome ---------------------------------------------------------------------------
+
+    void BuildChrome()
+    {
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(34) });
+        root.RowDefinitions.Add(new RowDefinition());
+
+        titleRow.ColumnDefinitions.Add(titleLeft);
+        titleRow.ColumnDefinitions.Add(new ColumnDefinition());
+        root.Children.Add(titleRow);
+
+        var bodyGrid = new Grid();
+        bodyGrid.ColumnDefinitions.Add(sidebarCol);
+        bodyGrid.ColumnDefinitions.Add(new ColumnDefinition());
+        bodyGrid.Children.Add(new ScrollViewer { Content = sidebarList, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        Grid.SetColumn(content, 1);
+        bodyGrid.Children.Add(content);
+        Grid.SetRow(bodyGrid, 1);
+        root.Children.Add(bodyGrid);
+
+        Grid.SetRowSpan(palette, 2);
+        root.Children.Add(palette);
+    }
+
+    void BuildTitleRow()
+    {
+        titleRow.Children.Clear();
+        titleRow.Background = Theme.Brush("TitleBar");
+        var dim = Theme.Brush("TextDim");
+
+        var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        left.Children.Add(Ui.IconButton(Ui.SidebarIcon(dim), "Toggle sidebar (Ctrl+Shift+B)", ToggleSidebar));
+
+        var bell = new Grid();
+        bell.Children.Add(Ui.Glyph(Ui.Bell, 14, dim));
+        bellBadge.Child = bellCount;
+        bellBadge.Background = Theme.Brush("Accent");
+        bellBadge.CornerRadius = new CornerRadius(7);
+        bellBadge.MinWidth = 14;
+        bellBadge.Height = 14;
+        bellBadge.Padding = new Thickness(3, 0, 3, 0);
+        bellBadge.HorizontalAlignment = HorizontalAlignment.Right;
+        bellBadge.VerticalAlignment = VerticalAlignment.Top;
+        bellBadge.Margin = new Thickness(0, -7, -9, 0);
+        bellCount.FontSize = 9.5;
+        bellCount.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        bellCount.Foreground = Theme.Brush("SelectedText");
+        bellCount.HorizontalAlignment = HorizontalAlignment.Center;
+        bellCount.VerticalAlignment = VerticalAlignment.Center;
+        if (bellBadge.Parent is Panel oldParent) oldParent.Children.Remove(bellBadge);
+        bell.Children.Add(bellBadge);
+        bellButton = Ui.IconButton(bell, "Notifications (Ctrl+Shift+I)", () => bellFlyout.ShowAt(bellButton));
+        bellFlyout = new Flyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft, ShouldConstrainToRootBounds = true, FlyoutPresenterStyle = SolidPresenter(typeof(FlyoutPresenter)) };
+        bellFlyout.Opening += (_, _) => bellFlyout.Content = NotificationsList();
+        left.Children.Add(bellButton);
+        left.Children.Add(Ui.IconButton(Ui.Glyph(Ui.Add, 13, dim), "New workspace (Ctrl+Shift+N)", NewWorkspace));
+        titleRow.Children.Add(left);
+
+        dragRegion.Children.Clear();
+        dragRegion.Background = new SolidColorBrush(Colors.Transparent);
+        var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0) };
+        title.Children.Add(Ui.Glyph(Ui.Folder, 13, Theme.Brush("Link")));
+        titleText.FontSize = 13;
+        titleText.FontFamily = new FontFamily(Theme.UiFont);
+        titleText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        titleText.Foreground = Theme.Brush("Text");
+        title.Children.Add(titleText);
+        dragRegion.Children.Add(title);
+        Grid.SetColumn(dragRegion, 1);
+        titleRow.Children.Add(dragRegion);
+
+        var tb = AppWindow.TitleBar;
+        tb.ButtonBackgroundColor = Colors.Transparent;
+        tb.ButtonInactiveBackgroundColor = Colors.Transparent;
+        tb.ButtonForegroundColor = Theme.Color("Text");
+        tb.ButtonInactiveForegroundColor = Theme.Color("TextFaint");
+        tb.ButtonHoverBackgroundColor = Theme.Color("SidebarHover");
+        tb.ButtonHoverForegroundColor = Theme.Color("Text");
+    }
+
+    void UpdateTitle()
+    {
+        var ws = state.Current;
+        titleText.Text = ws is null ? "armux" : ws.Zoomed is null ? ws.Title : $"{ws.Title}  ·  zoomed";
+        Title = ws is null ? "armux" : $"{ws.Title} - armux";
+        titleLeft.Width = new GridLength(sidebarVisible ? SidebarWidth : 120);
+    }
+
+    void UpdateBell()
+    {
+        int n = state.UnreadTotal;
+        bellCount.Text = n > 99 ? "99+" : n.ToString();
+        bellBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ---- rendering -----------------------------------------------------------------------
+
+    void RenderAll()
+    {
+        root.RequestedTheme = Theme.Dark ? ElementTheme.Dark : ElementTheme.Light;
+        root.Background = Theme.Brush("Sidebar");
+        content.Background = Theme.Brush("Divider");
+        BuildTitleRow();
+        // Theme brushes are baked into views, so a theme change rebuilds them.
+        foreach (var v in paneViews.Values) v.Detach();
+        paneViews.Clear();
+        foreach (var (s, panel) in panels.ToList())
+            if (panel is not BrowserPanel) panels.Remove(s);
+        RenderSidebar();
+        RenderContent();
+        UpdateTitle();
+        UpdateBell();
+    }
+
+    void RenderSidebar()
+    {
+        sidebarList.Children.Clear();
+        foreach (var ws in state.Workspaces)
+            sidebarList.Children.Add(new SidebarRow(ws, state, SelectWorkspace, ShowWorkspaceMenu));
+    }
+
+    void RenderContent()
+    {
+        try { RenderContentCore(); }
+        catch (Exception ex) { App.Log(nameof(RenderContent), ex); }
+    }
+
+    void RenderContentCore()
+    {
+        foreach (var v in paneViews.Values)
+            if (v.Parent is Panel p) p.Children.Remove(v);
+        content.Children.Clear();
+        if (state.Current is not { } ws) return;
+        var tree = ws.Zoomed is { } z ? Mount(z) : Build(ws.Root);
+        content.Children.Add(tree);
+        foreach (var pane in ws.Panes) ViewOf(pane).Refresh();
+        UpdateTitle();
+    }
+
+    FrameworkElement Build(PaneNode node)
+    {
+        if (node is Pane pane) return Mount(pane);
+        var s = (SplitNode)node;
+        var g = new Grid();
+        bool right = s.Direction == SplitDirection.Right;
+        for (int i = 0; i < 3; i++)
+        {
+            if (right) g.ColumnDefinitions.Add(new ColumnDefinition());
+            else g.RowDefinitions.Add(new RowDefinition());
+        }
+        var a = Build(s.First);
+        var b = Build(s.Second);
+        var handle = new SplitterHandle(s, g);
+        if (right)
+        {
+            g.ColumnDefinitions[1].Width = new GridLength(1);
+            Grid.SetColumn(handle, 1);
+            Grid.SetColumn(b, 2);
+        }
+        else
+        {
+            g.RowDefinitions[1].Height = new GridLength(1);
+            Grid.SetRow(handle, 1);
+            Grid.SetRow(b, 2);
+        }
+        g.Children.Add(a);
+        g.Children.Add(b);
+        g.Children.Add(handle);
+        handle.Apply();
+        return g;
+    }
+
+    /// <summary>The cached view for <paramref name="pane"/>, created on first use.</summary>
+    PaneView ViewOf(Pane pane)
+    {
+        if (!paneViews.TryGetValue(pane, out var v)) paneViews[pane] = v = new PaneView(pane, this);
+        return v;
+    }
+
+    /// <summary>The view for <paramref name="pane"/>, detached so it can be placed in a new layout.</summary>
+    PaneView Mount(Pane pane)
+    {
+        var v = ViewOf(pane);
+        if (v.Parent is Panel p) p.Children.Remove(v);
+        return v;
+    }
+
+    // ---- IPaneHost --------------------------------------------------------------------------
+
+    public bool IsFocused(Pane pane) => ReferenceEquals(state.Current?.Focused, pane);
+
+    public void FocusPane(Pane pane)
+    {
+        if (state.Current is not { } ws || ReferenceEquals(ws.Focused, pane)) return;
+        var old = ws.Focused;
+        ws.Focused = pane;
+        if (pane.Selected is { } s) state.MarkRead(ws, s);
+        if (old is not null && paneViews.TryGetValue(old, out var ov)) ov.Refresh();
+        ViewOf(pane).Refresh();
+    }
+
+    public void SelectSurface(Pane pane, Surface surface)
+    {
+        pane.Selected = surface;
+        FocusPane(pane);
+        if (state.Current is { } ws) state.MarkRead(ws, surface);
+        if (paneViews.TryGetValue(pane, out var v)) v.Refresh();
+    }
+
+    public void CloseSurface(Pane pane, Surface surface)
+    {
+        if (state.Current is not { } ws) return;
+        if (panels.Remove(surface, out var panel) && panel is BrowserPanel bp) browsers.Close(bp);
+        state.MarkRead(ws, surface);
+        int at = pane.Surfaces.IndexOf(surface);
+        pane.Surfaces.Remove(surface);
+        if (pane.Surfaces.Count > 0)
+        {
+            pane.Selected = pane.Surfaces[Math.Min(at, pane.Surfaces.Count - 1)];
+            ViewOf(pane).Refresh();
+            return;
+        }
+        if (Layout.Close(ws, pane))
+        {
+            if (paneViews.Remove(pane, out var v)) v.Detach();
+            RenderContent();
+        }
+        else if (state.Workspaces.Count > 1) CloseWorkspace(ws);
+        else NewSurface(pane, PanelKind.Terminal);
+    }
+
+    public void NewSurface(Pane pane, PanelKind kind)
+    {
+        var s = kind == PanelKind.Browser ? MockData.Browser() : MockData.Terminal("pwsh");
+        pane.Surfaces.Add(s);
+        SelectSurface(pane, s);
+    }
+
+    public void SplitPane(Pane pane, SplitDirection direction)
+    {
+        if (state.Current is not { } ws) return;
+        Layout.Split(ws, pane, direction, MockData.Terminal("pwsh"));
+        RenderContent();
+    }
+
+    public FrameworkElement PanelFor(Surface surface)
+    {
+        if (!panels.TryGetValue(surface, out var p))
+            panels[surface] = p = surface.Kind == PanelKind.Browser ? new BrowserPanel(surface, browsers) : new TerminalView(surface);
+        return p;
+    }
+
+    // ---- workspaces ---------------------------------------------------------------------------
+
+    void SelectWorkspace(Workspace ws)
+    {
+        if (ReferenceEquals(state.Current, ws)) return;
+        state.Current = ws;
+        RenderContent();
+    }
+
+    void NewWorkspace()
+    {
+        var ws = MockData.NewWorkspace($"workspace {state.Workspaces.Count + 1}", "", "main", "~", MockData.Terminal("pwsh"));
+        state.Workspaces.Add(ws);
+        SelectWorkspace(ws);
+    }
+
+    void CloseWorkspace(Workspace ws)
+    {
+        if (state.Workspaces.Count <= 1) return;
+        int at = state.Workspaces.IndexOf(ws);
+        foreach (var pane in ws.Panes.ToList())
+        {
+            foreach (var s in pane.Surfaces)
+                if (panels.Remove(s, out var panel) && panel is BrowserPanel bp) browsers.Close(bp);
+            if (paneViews.Remove(pane, out var v)) v.Detach();
+        }
+        foreach (var n in state.Notifications.Where(n => ReferenceEquals(n.Workspace, ws)).ToList()) state.Notifications.Remove(n);
+        state.Workspaces.Remove(ws);
+        if (ReferenceEquals(state.Current, ws)) SelectWorkspace(state.Workspaces[Math.Min(at, state.Workspaces.Count - 1)]);
+        UpdateBell();
+    }
+
+    void ToggleSidebar()
+    {
+        sidebarVisible = !sidebarVisible;
+        sidebarCol.Width = new GridLength(sidebarVisible ? SidebarWidth : 0);
+        UpdateTitle();
+    }
+
+    void ShowWorkspaceMenu(Workspace ws, FrameworkElement anchor)
+    {
+        var menu = new MenuFlyout { ShouldConstrainToRootBounds = true, MenuFlyoutPresenterStyle = SolidPresenter(typeof(MenuFlyoutPresenter)) };
+        void Add(MenuFlyoutItemBase item) => menu.Items.Add(item);
+        MenuFlyoutItem Item(string text, Action run) { var i = new MenuFlyoutItem { Text = text }; i.Click += (_, _) => run(); return i; }
+
+        Add(Item("Rename…", () => _ = RenameAsync(ws)));
+        Add(Item(ws.Pinned ? "Unpin" : "Pin to top", () => { ws.Pinned = !ws.Pinned; state.SortPinned(); }));
+        Add(Item("Color…", () => ShowColorFlyout(ws, anchor)));
+        Add(new MenuFlyoutSeparator());
+        Add(Item("Close workspace", () => CloseWorkspace(ws)));
+        menu.ShowAt(anchor);
+    }
+
+    /// <summary>cmux tab colors: 17 presets, a custom color, or none.</summary>
+    void ShowColorFlyout(Workspace ws, FrameworkElement anchor)
+    {
+        var flyout = new Flyout
+        {
+            ShouldConstrainToRootBounds = true,
+            Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.RightEdgeAlignedTop,
+            FlyoutPresenterStyle = SolidPresenter(typeof(FlyoutPresenter)),
+        };
+        var grid = new Grid { RowSpacing = 8, ColumnSpacing = 8 };
+        const int perRow = 6;
+        for (int c = 0; c < perRow; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        for (int r = 0; r < (WorkspaceColors.Presets.Length + perRow - 1) / perRow; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (int i = 0; i < WorkspaceColors.Presets.Length; i++)
+        {
+            var (name, hex) = WorkspaceColors.Presets[i];
+            var swatch = new Microsoft.UI.Xaml.Shapes.Ellipse
+            {
+                Width = 22, Height = 22, Fill = Theme.Hex(hex),
+                Stroke = ws.Color == hex ? Theme.Brush("Text") : null, StrokeThickness = 2,
+            };
+            ToolTipService.SetToolTip(swatch, name);
+            swatch.Tapped += (_, _) => { ws.Color = hex; flyout.Hide(); };
+            Grid.SetRow(swatch, i / perRow);
+            Grid.SetColumn(swatch, i % perRow);
+            grid.Children.Add(swatch);
+        }
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
+        var custom = new Button { Content = "Custom…" };
+        custom.Click += (_, _) => { flyout.Hide(); _ = CustomColorAsync(ws); };
+        var none = new Button { Content = "No color" };
+        none.Click += (_, _) => { ws.Color = null; flyout.Hide(); };
+        buttons.Children.Add(custom);
+        buttons.Children.Add(none);
+        var body = new StackPanel();
+        body.Children.Add(Ui.Text("Workspace color", 13, Theme.Brush("Text"), semibold: true));
+        body.Children.Add(new Border { Height = 10 });
+        body.Children.Add(grid);
+        body.Children.Add(buttons);
+        flyout.Content = body;
+        flyout.ShowAt(anchor);
+    }
+
+    /// <summary>Solid themed popup background. The default acrylic does not survive window capture.</summary>
+    static Style SolidPresenter(Type target)
+    {
+        var s = new Style(target);
+        s.Setters.Add(new Setter(Control.BackgroundProperty, Theme.Brush("Palette")));
+        s.Setters.Add(new Setter(Control.BorderBrushProperty, Theme.Brush("Border")));
+        return s;
+    }
+
+    async Task RenameAsync(Workspace ws)
+    {
+        var box = new TextBox { Text = ws.Title };
+        box.SelectAll();
+        var dlg = Dialog("Rename workspace", box, "Rename");
+        if (await dlg.ShowAsync() == ContentDialogResult.Primary && box.Text.Trim() is { Length: > 0 } t)
+        {
+            ws.Title = t;
+            UpdateTitle();
+        }
+    }
+
+    async Task CustomColorAsync(Workspace ws)
+    {
+        var picker = new ColorPicker { IsAlphaEnabled = false, IsMoreButtonVisible = false, Color = ws.Color is null ? Theme.Color("Accent") : Theme.Hex(ws.Color).Color };
+        if (await Dialog("Workspace color", picker, "Apply").ShowAsync() == ContentDialogResult.Primary)
+            ws.Color = $"#{picker.Color.R:X2}{picker.Color.G:X2}{picker.Color.B:X2}";
+    }
+
+    ContentDialog Dialog(string title, UIElement body, string primary) => new()
+    {
+        XamlRoot = root.XamlRoot,
+        RequestedTheme = root.RequestedTheme,
+        Title = title,
+        Content = body,
+        PrimaryButtonText = primary,
+        CloseButtonText = "Cancel",
+        DefaultButton = ContentDialogButton.Primary,
+    };
+
+    // ---- notifications -----------------------------------------------------------------------
+
+    UIElement NotificationsList()
+    {
+        var panel = new StackPanel { Width = 380, Spacing = 2 };
+        var head = new Grid { Margin = new Thickness(4, 0, 0, 8) };
+        head.ColumnDefinitions.Add(new ColumnDefinition());
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        head.Children.Add(Ui.Text("Notifications", 14, Theme.Brush("Text"), semibold: true));
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        var markAll = new HyperlinkButton { Content = "Mark all read", FontSize = 12, Padding = new Thickness(4, 0, 4, 0) };
+        markAll.Click += (_, _) => { state.MarkAllRead(); bellFlyout.Hide(); };
+        var clear = new HyperlinkButton { Content = "Clear", FontSize = 12, Padding = new Thickness(4, 0, 4, 0) };
+        clear.Click += (_, _) => { state.Clear(); bellFlyout.Hide(); };
+        actions.Children.Add(markAll);
+        actions.Children.Add(clear);
+        Grid.SetColumn(actions, 1);
+        head.Children.Add(actions);
+        panel.Children.Add(head);
+
+        if (state.Notifications.Count == 0)
+            panel.Children.Add(Ui.Text("No notifications", 12.5, Theme.Brush("TextFaint")));
+        foreach (var n in state.Notifications.Take(30))
+        {
+            var row = new Grid { Padding = new Thickness(8, 6, 8, 7), CornerRadius = new CornerRadius(6), ColumnSpacing = 8 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 7, Height = 7, Margin = new Thickness(0, 5, 0, 0), VerticalAlignment = VerticalAlignment.Top, Fill = n.Read ? null : Theme.Brush("Accent") });
+            var text = new StackPanel { Spacing = 1 };
+            text.Children.Add(Ui.Text(n.Title, 12.5, Theme.Brush("Text"), semibold: !n.Read));
+            var body = Ui.Text(n.Body, 12, Theme.Brush("TextDim"));
+            body.TextWrapping = TextWrapping.Wrap;
+            body.MaxLines = 2;
+            text.Children.Add(body);
+            text.Children.Add(Ui.Text($"{n.Workspace.Title} · {n.Time:HH:mm}", 11, Theme.Brush("TextFaint")));
+            Grid.SetColumn(text, 1);
+            row.Children.Add(text);
+            row.PointerEntered += (_, _) => row.Background = Theme.Brush("SidebarHover");
+            row.PointerExited += (_, _) => row.Background = null;
+            row.Tapped += (_, _) => { bellFlyout.Hide(); JumpTo(n); };
+            panel.Children.Add(row);
+        }
+        return new ScrollViewer { Content = panel, MaxHeight = 520 };
+    }
+
+    void JumpTo(Notification n)
+    {
+        SelectWorkspace(n.Workspace);
+        if (n.Workspace.Zoomed is not null && !ReferenceEquals(n.Workspace.Zoomed, n.Pane))
+        {
+            n.Workspace.Zoomed = null;
+            RenderContent();
+        }
+        SelectSurface(n.Pane, n.Surface);
+    }
+
+    // ---- startup ---------------------------------------------------------------------------
+
+    void OnFirstLoad()
+    {
+        bool recorded = false;
+        void OnRender(object? s, object e)
+        {
+            if (recorded) return;
+            recorded = true;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRender;
+            var ms = (DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime).TotalMilliseconds;
+            if (Environment.GetEnvironmentVariable("ARMUX_TIMING_FILE") is { } path) File.WriteAllText(path, $"first_frame_ms={ms:F1}\n");
+        }
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRender;
+
+        if (opts.Select > 0 && opts.Select <= state.Workspaces.Count) SelectWorkspace(state.Workspaces[opts.Select - 1]);
+        if (opts.Zoom) ToggleZoom();
+        if (opts.Palette) OpenPalette();
+        if (opts.Notifications) bellFlyout.ShowAt(bellButton);
+        if (opts.Menu && sidebarList.Children.Count > 1 && sidebarList.Children[1] is SidebarRow row)
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ShowWorkspaceMenu(state.Workspaces[1], row));
+        if (opts.Colors && sidebarList.Children.Count > 1 && sidebarList.Children[1] is SidebarRow crow)
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ShowColorFlyout(state.Workspaces[1], crow));
+        if (opts.CloseAfterMs >= 0)
+        {
+            var t = DispatcherQueue.CreateTimer();
+            t.Interval = TimeSpan.FromMilliseconds(opts.CloseAfterMs);
+            t.IsRepeating = false;
+            t.Tick += (_, _) =>
+            {
+                foreach (var ws in state.Workspaces)
+                    foreach (var pane in ws.Panes.ToList())
+                        foreach (var s in pane.Surfaces.Where(s => s.Kind == PanelKind.Browser).ToList())
+                            CloseSurface(pane, s);
+            };
+            t.Start();
+        }
+    }
+}

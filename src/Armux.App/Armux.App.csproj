@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion>
+    <RootNamespace>Armux.App</RootNamespace>
+    <!-- "armux.exe" is reserved for the CLI (Phase 3), as cmux ships a `cmux` CLI next to its app. -->
+    <AssemblyName>ArmuxApp</AssemblyName>
+    <Platforms>ARM64</Platforms>
+    <Platform>ARM64</Platform>
+    <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <SelfContained>false</SelfContained>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- Release builds ship as NativeAOT: idle 95 MB working set vs 135 MB with the JIT, start-up 156 ms vs 320 ms
+         (ARCHITECTURE.md section 7). AOT needs a self-contained publish; `dotnet build` stays framework-dependent. -->
+    <PublishAot>true</PublishAot>
+    <SelfContained Condition="'$(_IsPublishing)' == 'true'">true</SelfContained>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Platform SDK, approved 2026-10-25 (Microsoft Software License Terms). See ARCHITECTURE.md section 10. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Armux.Core\Armux.Core.csproj" />
+  </ItemGroup>
+</Project>
