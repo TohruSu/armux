@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/apaslam09/armux/blob/main/CONTRIBUTING.md
+    about: Setup on Windows on ARM, coding rules, and how to pick a first issue.
+  - name: Architecture and design decisions
+    url: https://github.com/apaslam09/armux/blob/main/ARCHITECTURE.md
+    about: Read this before proposing a large change.

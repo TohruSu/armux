@@ -1,0 +1,58 @@
+name: Good first issue (maintainers)
+description: A small, well-scoped task for a new contributor. Maintainers file these.
+labels: [good first issue]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A good first issue should be finishable in one sitting by someone new to the codebase. Name the files, define "done", and say how to verify it, including how to verify **without** ARM64 hardware (CI runs on a native `windows-11-arm` runner).
+
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: One or two sentences.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [UI / frontend, Terminal / ConPTY, Notifications, Browser pane, CLI, Build / CI, Docs, Memory measurement]
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Where to start
+      description: Files, functions or docs to read first.
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] ...
+        - [ ] CI passes on windows-11-arm
+    validations:
+      required: true
+
+  - type: textarea
+    id: arm
+    attributes:
+      label: ARM64 notes
+      description: Anything ARM-specific, such as dependencies without ARM64 builds, x64 emulation traps, or WebView2 behavior on Snapdragon GPUs.
+      value: |
+        - Build with the native toolchain: `rustup show` should list host `aarch64-pc-windows-msvc`.
+        - Use an ARM64 Node.js build. An x64 Node under emulation installs x64 native modules.
+        - No ARM64 device? Push to a fork. CI builds and verifies the binary on a native ARM64 runner.
+
+  - type: input
+    id: mentor
+    attributes:
+      label: Mentor
+      description: Who can answer questions on this issue?

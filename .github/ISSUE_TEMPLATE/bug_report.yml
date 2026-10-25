@@ -1,0 +1,82 @@
+name: Bug report
+description: Something is broken or behaves differently from what the docs say.
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. armux targets **Windows 11 on ARM64 only**. Please fill in the device details so we can tell hardware, driver and emulation problems apart.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a new workspace (Ctrl+Shift+N)
+        2. Split right (Ctrl+Shift+D)
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: armux version
+      description: Output of `armux --version`, or the commit SHA if you built from source.
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and SoC
+      placeholder: Surface Laptop 7, Snapdragon X Plus X1P-64-100
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows build
+      description: Run `winver`, or `[Environment]::OSVersion.Version` in PowerShell.
+      placeholder: 10.0.26200
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: native
+    attributes:
+      label: Native ARM64 check
+      description: In Task Manager > Details, right-click a column header > Select columns > Architecture. armux.exe should show ARM64.
+      options:
+        - label: armux.exe shows **ARM64** in Task Manager (not x64 or ARM64EC)
+          required: true
+
+  - type: dropdown
+    id: shell
+    attributes:
+      label: Shell in the affected pane
+      options: [PowerShell 7 (pwsh), Windows PowerShell 5.1, cmd, WSL, Not shell related]
+    validations:
+      required: true
+
+  - type: textarea
+    id: memory
+    attributes:
+      label: Memory figures (if this is a memory or performance bug)
+      description: Paste the output of `pwsh scripts/measure-memory.ps1 -Name armux`.
+      render: text
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      render: text

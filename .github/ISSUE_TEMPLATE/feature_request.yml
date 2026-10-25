@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a feature. UI features should trace to a cmux feature.
+labels: [enhancement, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        armux follows cmux's layout and interaction model. Every UI element should map to a cmux feature, and any Windows-specific deviation is recorded in ARCHITECTURE.md. Features with no cmux counterpart are still welcome, but they need a stronger case.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that armux makes hard today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+
+  - type: input
+    id: cmux
+    attributes:
+      label: Matching cmux feature
+      description: Link the cmux README or docs section, or write "none".
+      placeholder: https://github.com/manaflow-ai/cmux#notifications
+    validations:
+      required: true
+
+  - type: textarea
+    id: windows
+    attributes:
+      label: Windows differences
+      description: Anything that can't work the same way on Windows (shortcuts, APIs, system notifications)?
+
+  - type: textarea
+    id: memory
+    attributes:
+      label: Memory impact
+      description: Does this add a process, a WebView2 instance, a dependency or a long-lived buffer? Rough estimate is fine.
