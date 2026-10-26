@@ -62,7 +62,7 @@ public sealed class TerminalSession : IDisposable
             ptyLog = log;
             Log($"[start {cols}x{rows}]");
             pty = PtySession.Start(ShellIntegration.CommandLine(kind), cwd, ShellIntegration.Environment(kind, environment), cols, rows,
-                data => { if (log is not null) lock (log) log.Write(data.Span); Terminal.Feed(data.Span); QueueRender(); },
+                data => { if (log is not null) lock (log) { log.Write(data.Span); log.Flush(); } FeedSafely(data.Span); QueueRender(); },
                 code => ui.TryEnqueue(() => { Exited = true; ProcessExited?.Invoke(code); }));
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException)
@@ -71,6 +71,21 @@ public sealed class TerminalSession : IDisposable
             Terminal.Feed($"\x1b[31marmux: could not start {surface.Shell}: {e.Message}\x1b[0m\r\n");
         }
     }
+
+    /// <summary>
+    /// An exception on the reader thread would end the whole process (a fail-fast that Windows reports as a "stack
+    /// buffer overrun"). An emulator bug must cost at most a garbled screen: log it and keep reading.
+    /// </summary>
+    void FeedSafely(ReadOnlySpan<byte> data)
+    {
+        try { Terminal.Feed(data); }
+        catch (Exception e)
+        {
+            if (Interlocked.Increment(ref feedErrors) <= 3) App.Log(nameof(TerminalSession) + ".Feed", e);
+        }
+    }
+
+    int feedErrors;
 
     void QueueRender()
     {

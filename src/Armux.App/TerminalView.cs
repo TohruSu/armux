@@ -81,7 +81,14 @@ public sealed partial class TerminalView : UserControl
         CharacterReceived += OnCharacter;
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
-        PointerReleased += (_, e) => { selecting = false; ReleasePointerCapture(e.Pointer); };
+        PointerReleased += (_, e) =>
+        {
+            selecting = false;
+            ReleasePointerCapture(e.Pointer);
+            // Something after the press moved focus away (reported: typing died after every click, and worked only
+            // while the button was held). Take it back once the click has finished.
+            DispatcherQueue.TryEnqueue(() => { if (!hasFocus) Focus(FocusState.Pointer); });
+        };
         PointerWheelChanged += OnWheel;
     }
 
@@ -290,6 +297,8 @@ public sealed partial class TerminalView : UserControl
         selecting = true;
         CapturePointer(e.Pointer);
         lock (session.Terminal.Sync) DrawSelection(session.Terminal);
+        // Handled, so no ancestor acts on the press; the pane still sees it (it listens with handledEventsToo).
+        e.Handled = true;
     }
 
     void OnPointerMoved(object sender, PointerRoutedEventArgs e)

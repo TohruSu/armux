@@ -167,6 +167,8 @@ public sealed class Terminal : IVtHandler
             else
             {
                 ReflowMain(cols, rows, ref cx, ref cy, ref wrapPending);
+                // The alternate screen must match too: switching to it later clears and draws every row.
+                alt = Remap(alt, altWrap, cols, rows, 0, out altWrap);
                 screen = main; wrap = mainWrap;
             }
             Cols = cols; Rows = rows;

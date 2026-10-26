@@ -73,6 +73,14 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         Activated += (_, e) => IsActiveWindow = e.WindowActivationState != WindowActivationState.Deactivated;
         Toasts.Invoked += JumpToSurface;
         palette.Closed += FocusKeys;
+        // Diagnostics: ARMUX_FOCUS_LOG=<file> records every keyboard focus change.
+        if (Environment.GetEnvironmentVariable("ARMUX_FOCUS_LOG") is { Length: > 0 } focusLog)
+            Microsoft.UI.Xaml.Input.FocusManager.GotFocus += (_, e) =>
+            {
+                var el = e.NewFocusedElement as FrameworkElement;
+                var parent = el is null ? null : VisualTreeHelper.GetParent(el) as FrameworkElement;
+                File.AppendAllText(focusLog, $"{DateTime.Now:HH:mm:ss.fff} {e.NewFocusedElement?.GetType().Name ?? "null"} name='{el?.Name}' parent={parent?.GetType().Name}\n");
+            };
         pipe = new PipeServer(DispatcherQueue, HandleRequest);
         pipe.Start();
         Closed += (_, _) =>

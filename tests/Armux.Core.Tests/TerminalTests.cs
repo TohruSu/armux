@@ -174,6 +174,25 @@ public sealed class TerminalTests
     }
 
     [TestMethod]
+    public void AlternateScreenWorksAfterResizes()
+    {
+        // Regression: resizing on the main screen left the alternate screen at the old size, and Claude Code's
+        // switch to it crashed the app (IndexOutOfRangeException in SetAltScreen).
+        foreach (var (cols, rows) in new[] { (120, 40), (20, 3), (80, 24) })
+        {
+            var t = new Terminal(80, 24);
+            t.Resize(cols, rows);
+            t.Feed("\x1b[?1049h\x1b[Hfull screen\x1b[" + rows + ";1Hbottom");
+            Assert.IsTrue(t.AltScreen);
+            Assert.AreEqual("full screen", Line(t, 0));
+            Assert.AreEqual("bottom", Line(t, rows - 1));
+            t.Resize(cols + 7, rows + 2);
+            t.Feed("\x1b[?1049l");
+            Assert.IsFalse(t.AltScreen);
+        }
+    }
+
+    [TestMethod]
     public void NarrowingReflowsWrappedTextAndKeepsTheCursor()
     {
         var t = new Terminal(20, 4);
