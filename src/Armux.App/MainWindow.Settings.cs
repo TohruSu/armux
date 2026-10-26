@@ -23,8 +23,23 @@ public sealed partial class MainWindow
         RenderAll();
     }
 
-    void ChangeFontSize(double delta) =>
-        ApplySettings(Theme.Settings.WithTerminalFontSize(delta == 0 ? Settings.DefaultTerminalFontSize : Theme.TerminalFontSize + delta));
+    /// <summary>
+    /// Ctrl+= / Ctrl+- / Ctrl+0 and Ctrl+wheel. Only terminal views are rebuilt (shells keep running), so repeated
+    /// steps stay quick.
+    /// </summary>
+    void ChangeFontSize(double delta)
+    {
+        var s = Theme.Settings.WithTerminalFontSize(delta == 0 ? Settings.DefaultTerminalFontSize : Theme.TerminalFontSize + delta);
+        if (s.TerminalFontSize == Theme.TerminalFontSize) return;
+        Theme.UseSettings(s);
+        try { Theme.Settings.Save(SettingsPath); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { App.Log(nameof(ChangeFontSize), e); }
+        foreach (var (surface, panel) in panels.ToList())
+            if (panel is TerminalView or FileView) panels.Remove(surface);
+        if (state.Current is { } ws)
+            foreach (var pane in ws.Panes) ViewOf(pane).Refresh();
+        FocusKeys();
+    }
 
     async Task OpenSettingsAsync()
     {
@@ -89,8 +104,36 @@ public sealed partial class MainWindow
         shell.Items.Add("Command Prompt");
         shell.SelectedIndex = Theme.Settings.Shell == "cmd" ? 1 : 0;
 
+        var startDir = new TextBox
+        {
+            Text = Theme.Settings.StartDirectory,
+            PlaceholderText = "~ (your user folder)",
+            Width = 320,
+        };
+        var browse = new Button { Content = "Browse…", VerticalAlignment = VerticalAlignment.Bottom };
+        browse.Click += async (_, _) =>
+        {
+            var picker = new Windows.Storage.Pickers.FolderPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder };
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            try { if (await picker.PickSingleFolderAsync() is { } folder) startDir.Text = folder.Path; }
+            catch (Exception e) { App.Log("FolderPicker", e); }
+        };
+        var startRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        startRow.Children.Add(startDir);
+        startRow.Children.Add(browse);
+        var startBox = new StackPanel { Spacing = 6 };
+        startBox.Children.Add(Ui.Text("Start directory for new workspaces", 14, Theme.Brush("Text")));
+        startBox.Children.Add(startRow);
+        var startNote = Ui.Text("New tabs and splits open in their workspace's current directory.", 12, Theme.Brush("TextDim"));
+        startNote.TextWrapping = TextWrapping.Wrap;
+        startBox.Children.Add(startNote);
+        var copyOnSelect = new CheckBox { Content = "Copy text when you select it with the mouse", IsChecked = Theme.Settings.CopyOnSelect };
+
         var body = new StackPanel { Spacing = 12, Width = 440 };
         body.Children.Add(shell);
+        body.Children.Add(startBox);
+        body.Children.Add(copyOnSelect);
         body.Children.Add(terminalFont);
         body.Children.Add(showAll);
         body.Children.Add(sizeBox);
@@ -108,16 +151,46 @@ public sealed partial class MainWindow
             Fill(uiFont, FontList.All, d.UiFont);
             size = d.TerminalFontSize;
             shell.SelectedIndex = 0;
+            startDir.Text = d.StartDirectory;
+            copyOnSelect.IsChecked = d.CopyOnSelect;
             Update();
         };
+        dlg.PrimaryButtonClick += (_, a) =>
+        {
+            var dir = startDir.Text.Trim().Trim('"');
+            if (dir.Length > 0 && !Directory.Exists(ExpandHome(dir)))
+            {
+                startNote.Text = $"\"{dir}\" does not exist.";
+                startNote.Foreground = Theme.Brush("Term.Red");
+                a.Cancel = true;
+            }
+        };
         if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
-        ApplySettings(new Settings
+        ApplySettings(Theme.Settings with
         {
             TerminalFont = Chosen(terminalFont),
             TerminalFontSize = size,
             UiFont = Chosen(uiFont),
             Shell = shell.SelectedIndex == 1 ? "cmd" : "pwsh",
+            StartDirectory = startDir.Text,
+            CopyOnSelect = copyOnSelect.IsChecked == true,
         });
+    }
+
+    static string ExpandHome(string path)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return path == "~" ? home : path.StartsWith("~\\") || path.StartsWith("~/") ? Path.Join(home, path[2..]) : path;
+    }
+
+    /// <summary>The directory new workspaces start in, as shown in the sidebar ("~" for the user folder).</summary>
+    public static string StartDirectory()
+    {
+        var dir = Theme.Settings.StartDirectory;
+        if (dir.Length == 0 || !Directory.Exists(ExpandHome(dir))) return "~";
+        var full = Path.GetFullPath(ExpandHome(dir));
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return full.StartsWith(home, StringComparison.OrdinalIgnoreCase) ? "~" + full[home.Length..] : full;
     }
 
     static ComboBox FontBox(string header) => new()

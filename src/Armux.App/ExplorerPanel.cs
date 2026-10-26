@@ -25,6 +25,8 @@ public interface IExplorerHost
 public sealed partial class ExplorerPanel : Grid
 {
     const double RowHeight = 24, Indent = 14;
+    /// <summary>Drag data property holding the full path of an entry dragged out of the explorer.</summary>
+    public const string DragPathKey = "armux.path";
 
     readonly IExplorerHost host;
     readonly StackPanel list = new() { Padding = new Thickness(0, 2, 0, 12) };
@@ -155,6 +157,14 @@ public sealed partial class ExplorerPanel : Grid
         g.PointerExited += (_, _) => { hover = false; Paint(); };
         g.Tapped += (_, _) => { Select(e.Path); Activate(e); };
         g.RightTapped += (_, a) => { Select(e.Path, focus: false); ShowMenu(e, g, a); };
+        // Drag onto a terminal to type the path (relative to that terminal's directory).
+        g.CanDrag = true;
+        g.DragStarting += (_, a) =>
+        {
+            a.Data.SetText(e.Path);
+            a.Data.Properties[DragPathKey] = e.Path;
+            a.Data.RequestedOperation = DataPackageOperation.Copy;
+        };
         return g;
     }
 

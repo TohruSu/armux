@@ -11,7 +11,7 @@ namespace Armux.App;
 /// </summary>
 public sealed class PipeServer(DispatcherQueue ui, Func<Request, Response> handle) : IDisposable
 {
-    public static string PipeName => Ipc.PipeName;
+    public static string PipeName { get; } = Ipc.PipeNameFor(Environment.ProcessId);
 
     readonly CancellationTokenSource stop = new();
 
@@ -23,7 +23,7 @@ public sealed class PipeServer(DispatcherQueue ui, Func<Request, Response> handl
         {
             try
             {
-                using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
+                using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 1,
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(stop.Token);
                 using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);

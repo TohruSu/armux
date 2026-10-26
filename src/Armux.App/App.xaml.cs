@@ -26,6 +26,10 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Built-in controls (text boxes, menus, dialogs) take their font from this resource. Setting it in the
+        // constructor, before the XAML resources load, crashed start-up (0xC000027B).
+        try { Resources["ContentControlThemeFontFamily"] = new Microsoft.UI.Xaml.Media.FontFamily(Theme.UiFont); }
+        catch (Exception e) { Log("ContentControlThemeFontFamily", e); }
         window = new MainWindow(LaunchOptions.Parse(Environment.GetCommandLineArgs()));
         window.Activate();
     }

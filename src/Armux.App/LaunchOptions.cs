@@ -41,12 +41,12 @@ public sealed record LaunchOptions(
         _ => Live(Math.Max(1, Panes)),
     };
 
-    /// <summary>One workspace in the home folder with <paramref name="panes"/> live terminals running the default shell.</summary>
+    /// <summary>One workspace in the start directory from Settings with <paramref name="panes"/> live terminals running the default shell.</summary>
     static AppState Live(int panes)
     {
         static Surface Shell() => new() { Kind = PanelKind.Terminal, Title = Armux.App.Theme.Settings.Shell, Shell = Armux.App.Theme.Settings.Shell };
         var state = new AppState();
-        var ws = MockData.NewWorkspace("workspace 1", "", "", "~", Shell());
+        var ws = MockData.NewWorkspace("workspace 1", "", "", MainWindow.StartDirectory(), Shell());
         for (int i = 1; i < panes; i++)
         {
             // Split the largest pane along its longer side, like the mock "panes" layout.

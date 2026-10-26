@@ -30,8 +30,9 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Lilex, Zed's default font (SIL OFL-1.1, approved for fonts 2026-10-26). OFL.txt must ship with it. -->
-    <Content Include="Assets\Fonts\Lilex-VF.ttf;Assets\Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Zed's default fonts: Lilex (terminal) and IBM Plex Sans (interface), SIL OFL-1.1, approved for fonts
+         2026-10-26. Their license files must ship with them. -->
+    <Content Include="Assets\Fonts\*.ttf;Assets\Fonts\*.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Armux.Core\Armux.Core.csproj" />

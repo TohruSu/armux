@@ -111,9 +111,14 @@ public sealed partial class MainWindow
         Cmd("Copy", "Ctrl+Shift+C", () => FocusedTerminal()?.Copy());
         Cmd("Paste", "Ctrl+Shift+V", () => { if (FocusedTerminal() is { } t) _ = t.PasteAsync(); });
         Cmd("Settings…", "Ctrl+Shift+,", () => _ = OpenSettingsAsync());
-        Cmd("Increase Font Size", "Ctrl+Shift+=", () => ChangeFontSize(1));
-        Cmd("Decrease Font Size", "Ctrl+Shift+-", () => ChangeFontSize(-1));
-        Cmd("Reset Font Size", "Ctrl+Shift+0", () => ChangeFontSize(0));
+        // Ctrl+= / Ctrl+- / Ctrl+0 as in Windows Terminal and browsers (requested); the cmux-mapped Ctrl+Shift forms still work.
+        Cmd("Increase Font Size", "Ctrl+=", () => ChangeFontSize(1));
+        Cmd("Decrease Font Size", "Ctrl+-", () => ChangeFontSize(-1));
+        Cmd("Reset Font Size", "Ctrl+0", () => ChangeFontSize(0));
+        Key("Ctrl+Shift+=", () => ChangeFontSize(1));
+        Key("Ctrl+Shift+-", () => ChangeFontSize(-1));
+        Key("Ctrl+Shift+0", () => ChangeFontSize(0));
+        Cmd("Prompt Editor", "Ctrl+G", TogglePromptEditor);
         Cmd("Theme: Dark", "", () => SetTheme(true));
         Cmd("Theme: Light", "", () => SetTheme(false));
         Cmd("Theme: Match Windows", "", () => SetTheme(new Windows.UI.ViewManagement.UISettings()
@@ -142,8 +147,9 @@ public sealed partial class MainWindow
     {
         >= VirtualKey.A and <= VirtualKey.Z => k.ToString(),
         >= VirtualKey.Number0 and <= VirtualKey.Number9 => ((int)k - (int)VirtualKey.Number0).ToString(),
-        (VirtualKey)187 => "=",
-        (VirtualKey)189 => "-",
+        (VirtualKey)187 or VirtualKey.Add => "=",
+        (VirtualKey)189 or VirtualKey.Subtract => "-",
+        VirtualKey.NumberPad0 => "0",
         (VirtualKey)219 => "[",
         (VirtualKey)221 => "]",
         (VirtualKey)188 => ",",

@@ -3,7 +3,8 @@ using System.Text;
 using Armux.Core;
 
 // armux: the command-line companion of ArmuxApp, like cmux's `cmux` CLI. It talks to the running app over the
-// named pipe described in Armux.Core.Ipc. Inside an armux terminal, ARMUX_SURFACE_ID selects the calling terminal.
+// named pipe described in Armux.Core.Ipc. Inside an armux terminal, ARMUX_PIPE selects the window and
+// ARMUX_SURFACE_ID the calling terminal; outside, the first running armux window answers.
 
 const string Usage = """
     usage: armux <command> [options]
@@ -64,7 +65,8 @@ switch (request.Command)
 
 try
 {
-    using var pipe = new NamedPipeClientStream(".", Ipc.PipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
+    if (Ipc.FindPipe() is not { } pipeName) { Console.Error.WriteLine("armux: the app is not running"); return 1; }
+    using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
     pipe.Connect(2000);
     using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
     using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
@@ -77,7 +79,7 @@ try
 }
 catch (TimeoutException)
 {
-    Console.Error.WriteLine("armux: the app is not running (no pipe \\\\.\\pipe\\" + Ipc.PipeName + ")");
+    Console.Error.WriteLine("armux: the armux window does not answer (closed?)");
     return 1;
 }
 catch (IOException e)

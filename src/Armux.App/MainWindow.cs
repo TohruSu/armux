@@ -70,7 +70,11 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         RenderAll();
         root.Loaded += (_, _) => OnFirstLoad();
 
-        Activated += (_, e) => IsActiveWindow = e.WindowActivationState != WindowActivationState.Deactivated;
+        Activated += (_, e) =>
+        {
+            IsActiveWindow = e.WindowActivationState != WindowActivationState.Deactivated;
+            state.WindowActive = IsActiveWindow;
+        };
         Toasts.Invoked += JumpToSurface;
         palette.Closed += FocusKeys;
         // Diagnostics: ARMUX_FOCUS_LOG=<file> records every keyboard focus change.
@@ -160,7 +164,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0) };
         title.Children.Add(Ui.Glyph(Ui.Folder, 13, Theme.Brush("Link")));
         titleText.FontSize = 13;
-        titleText.FontFamily = new FontFamily(Theme.UiFont);
+        titleText.FontFamily = new FontFamily(Theme.UiFontSemibold);
         titleText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         titleText.Foreground = Theme.Brush("Text");
         // titleText outlives rebuilds (theme or font change); detach it from the previous title row first.
@@ -189,6 +193,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
     void UpdateBell()
     {
+        UpdateTaskbar();
         int n = state.UnreadTotal;
         bellCount.Text = n > 99 ? "99+" : n.ToString();
         bellBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -310,21 +315,24 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         FocusedTerminal()?.Focus(FocusState.Programmatic);
     });
 
-    public void FocusPane(Pane pane)
+    public void FocusPane(Pane pane, bool focusTerminal = true)
     {
         if (state.Current is not { } ws) return;
         // Clicking the pane that is already focused still has to give its terminal the keyboard back.
-        if (ReferenceEquals(ws.Focused, pane)) { FocusTerminal(); return; }
+        if (ReferenceEquals(ws.Focused, pane)) { if (focusTerminal) FocusTerminal(); return; }
         var old = ws.Focused;
         ws.Focused = pane;
         if (pane.Selected is { } s) state.MarkRead(ws, s);
         if (old is not null && paneViews.TryGetValue(old, out var ov)) ov.Refresh();
         ViewOf(pane).Refresh();
-        FocusTerminal();
+        if (focusTerminal) FocusTerminal();
+        UpdateTaskbar();
     }
 
     public void SelectSurface(Pane pane, Surface surface)
     {
+        // The prompt editor belongs to one tab; switching tabs closes it (its draft is kept).
+        if (!ReferenceEquals(pane.Selected, surface) && paneViews.TryGetValue(pane, out var pv) && pv.EditorOpen) pv.ShowEditor(null);
         pane.Selected = surface;
         FocusPane(pane);
         if (state.Current is { } ws) state.MarkRead(ws, surface);
@@ -377,7 +385,11 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
             {
                 PanelKind.Browser => new BrowserPanel(surface, browsers),
                 PanelKind.File => new FileView(surface),
-                _ => new TerminalView(SessionFor(surface)),
+                _ => new TerminalView(SessionFor(surface))
+                {
+                    ZoomRequested = step => ChangeFontSize(step),
+                    DropText = paths => DropText(surface, paths),
+                },
             };
         return p;
     }
@@ -390,11 +402,12 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         state.Current = ws;
         RenderContent();
         RenderExplorer(rebuild: false);
+        UpdateTaskbar();
     }
 
     void NewWorkspace()
     {
-        var ws = MockData.NewWorkspace($"workspace {state.Workspaces.Count + 1}", "", "", "~", LiveTerminal());
+        var ws = MockData.NewWorkspace($"workspace {state.Workspaces.Count + 1}", "", "", StartDirectory(), LiveTerminal());
         state.Workspaces.Add(ws);
         SelectWorkspace(ws);
     }

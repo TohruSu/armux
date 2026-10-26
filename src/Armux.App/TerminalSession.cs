@@ -24,22 +24,40 @@ public sealed class TerminalSession : IDisposable
     public Terminal Terminal { get; } = new(80, 24);
     public bool Started { get; private set; }
     public bool Exited { get; private set; }
+    /// <summary>The shell's working directory (OSC 7), or the directory it started in.</summary>
+    public string? Cwd { get; private set; }
+    /// <summary>Working or idle, from OSC 9;4 progress and Claude Code's title (see <see cref="AgentStatus"/>).</summary>
+    public AgentState State { get; private set; }
+    /// <summary>The program's own tab title, before armux shortens it.</summary>
+    public string RawTitle { get; private set; } = "";
 
     /// <summary>Raised on the UI thread when output arrived (coalesced: at most one pending call).</summary>
     public event Action? Changed;
     public event Action<TermNotification>? Notified;
     public event Action<string>? CwdChanged;
     public event Action<int>? ProcessExited;
+    /// <summary>Raised on the UI thread when <see cref="State"/> changes.</summary>
+    public event Action? StateChanged;
+    /// <summary>Raised on the UI thread for BEL. Claude Code rings it when it needs input.</summary>
+    public event Action? Bell;
 
     public TerminalSession(Surface surface, DispatcherQueue ui, string? cwd, IReadOnlyDictionary<string, string> environment)
     {
         this.surface = surface;
         this.ui = ui;
         this.cwd = cwd;
+        Cwd = cwd;
         this.environment = environment;
-        Terminal.TitleChanged += t => ui.TryEnqueue(() => { if (t.Length > 0) surface.Title = TabTitle(t); });
+        Terminal.TitleChanged += t => ui.TryEnqueue(() =>
+        {
+            RawTitle = t;
+            if (t.Length > 0) surface.Title = TabTitle(t);
+            UpdateState();
+        });
+        Terminal.ProgressChanged += () => ui.TryEnqueue(UpdateState);
+        Terminal.Bell += () => ui.TryEnqueue(() => Bell?.Invoke());
         Terminal.Notified += n => ui.TryEnqueue(() => Notified?.Invoke(n));
-        Terminal.CwdChanged += p => ui.TryEnqueue(() => CwdChanged?.Invoke(p));
+        Terminal.CwdChanged += p => ui.TryEnqueue(() => { Cwd = p; CwdChanged?.Invoke(p); });
         Terminal.Reply += r => pty?.Write(r);
     }
 
@@ -87,6 +105,15 @@ public sealed class TerminalSession : IDisposable
 
     int feedErrors;
 
+    void UpdateState()
+    {
+        var state = AgentStatus.FromProgress(Terminal.ProgressState);
+        if (state == AgentState.Idle && AgentStatus.TitleShowsWork(RawTitle)) state = AgentState.Working;
+        if (state == State) return;
+        State = state;
+        StateChanged?.Invoke();
+    }
+
     void QueueRender()
     {
         if (Interlocked.Exchange(ref renderQueued, 1) == 1) return;
@@ -107,6 +134,13 @@ public sealed class TerminalSession : IDisposable
     }
 
     public void Send(string text) => pty?.Write(text);
+
+    /// <summary>Pastes text the way Ctrl+Shift+V does: bracketed when the program asked for it.</summary>
+    public void Paste(string text)
+    {
+        text = text.Replace("\r\n", "\r").Replace('\n', '\r');
+        Send(Terminal.BracketedPaste ? "\u001b[200~" + text.Replace("\u001b[201~", "") + "\u001b[201~" : text);
+    }
 
     public void Dispose()
     {
@@ -157,12 +191,15 @@ public static class ShellIntegration
     {
         var shell = Shells.CommandLine(kind);
         if (kind != ShellKind.PowerShell) return shell;
-        // Runs after the profile, wrapping whatever prompt it defined. [char]27 works in Windows PowerShell 5.1 too.
+        // Runs after the profile, wrapping whatever prompt it defined. The directory is also reported on every
+        // location change (PowerShell 7.1+), so `cd x; claude` updates armux before the prompt returns.
+        // [char]27 works in Windows PowerShell 5.1 too.
         const string script =
+            "function global:__armuxCwd { $l = $executionContext.SessionState.Path.CurrentLocation; " +
+            "if ($l.Provider.Name -eq 'FileSystem') { [Console]::Write([char]27 + ']7;file://localhost/' + ($l.ProviderPath -replace '\\\\', '/') + [char]7) } }; " +
             "$global:__armuxPrompt = $function:prompt; " +
-            "function global:prompt { $l = $executionContext.SessionState.Path.CurrentLocation; " +
-            "if ($l.Provider.Name -eq 'FileSystem') { [Console]::Write([char]27 + ']7;file://localhost/' + ($l.ProviderPath -replace '\\\\', '/') + [char]7) }; " +
-            "& $global:__armuxPrompt }";
+            "function global:prompt { __armuxCwd; & $global:__armuxPrompt }; " +
+            "if ($ExecutionContext.InvokeCommand.PSObject.Properties['LocationChangedAction']) { $ExecutionContext.InvokeCommand.LocationChangedAction = { __armuxCwd } }";
         return $"{shell} -NoExit -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}";
     }
 

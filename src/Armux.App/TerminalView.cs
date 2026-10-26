@@ -45,8 +45,14 @@ public sealed partial class TerminalView : UserControl
     bool follow = true, hasFocus, selecting;
     (int Line, int Col)? selA, selB;
     char highSurrogate;
+    int wheelAccum, reportButton = -1;
+    (int Col, int Row) lastReported = (-1, -1);
 
     public TerminalSession Session => session;
+    /// <summary>Ctrl+wheel: +1 or -1 font size step.</summary>
+    public Action<int>? ZoomRequested { get; set; }
+    /// <summary>Text for a file dropped on the terminal (the window turns paths into relative, quoted text).</summary>
+    public Func<IReadOnlyList<string>, string>? DropText { get; set; }
 
     public TerminalView(TerminalSession session)
     {
@@ -81,15 +87,11 @@ public sealed partial class TerminalView : UserControl
         CharacterReceived += OnCharacter;
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
-        PointerReleased += (_, e) =>
-        {
-            selecting = false;
-            ReleasePointerCapture(e.Pointer);
-            // Something after the press moved focus away (reported: typing died after every click, and worked only
-            // while the button was held). Take it back once the click has finished.
-            DispatcherQueue.TryEnqueue(() => { if (!hasFocus) Focus(FocusState.Pointer); });
-        };
+        PointerReleased += OnPointerReleased;
         PointerWheelChanged += OnWheel;
+        AllowDrop = true;
+        DragOver += OnDragOver;
+        Drop += OnDrop;
     }
 
     void OnChanged() => Render(force: false);
@@ -287,10 +289,42 @@ public sealed partial class TerminalView : UserControl
         return (viewTop + row, col);
     }
 
+    /// <summary>
+    /// The program gets the mouse when it turned tracking on (Claude Code, vim, htop); Shift+click still selects,
+    /// as in other terminals.
+    /// </summary>
+    bool Reporting(PointerRoutedEventArgs e) => session.Terminal.Mouse != MouseTracking.None && !Down(VirtualKey.Shift);
+
+    (int Col, int Row) ScreenCell(PointerRoutedEventArgs e)
+    {
+        var p = e.GetCurrentPoint(content).Position;
+        return (Math.Clamp((int)(p.X / cellW), 0, session.Terminal.Cols - 1), Math.Clamp((int)(p.Y / cellH), 0, session.Terminal.Rows - 1));
+    }
+
+    bool Report(MouseAction action, int button, PointerRoutedEventArgs e)
+    {
+        var (col, row) = ScreenCell(e);
+        if (action == MouseAction.Move && (col, row) == lastReported) return true;
+        lastReported = (col, row);
+        var t = session.Terminal;
+        if (MouseEncoder.Encode(t.Mouse, t.SgrMouse, action, button, col, row, Down(VirtualKey.Shift), Down(VirtualKey.Menu), Down(VirtualKey.Control)) is { } seq)
+            session.Send(seq);
+        return true;
+    }
+
     void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         Focus(FocusState.Pointer);
         var props = e.GetCurrentPoint(this).Properties;
+        int button = props.IsLeftButtonPressed ? 0 : props.IsMiddleButtonPressed ? 1 : props.IsRightButtonPressed ? 2 : -1;
+        if (button >= 0 && Reporting(e))
+        {
+            reportButton = button;
+            CapturePointer(e.Pointer);
+            Report(MouseAction.Press, button, e);
+            e.Handled = true;
+            return;
+        }
         if (props.IsRightButtonPressed) { ShowMenu(e); e.Handled = true; return; }
         if (!props.IsLeftButtonPressed) return;
         selA = selB = CellAt(e);
@@ -303,9 +337,63 @@ public sealed partial class TerminalView : UserControl
 
     void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        if (reportButton >= 0 || (Reporting(e) && session.Terminal.Mouse == MouseTracking.Any))
+        {
+            Report(MouseAction.Move, reportButton, e);
+            return;
+        }
         if (!selecting) return;
         selB = CellAt(e);
         lock (session.Terminal.Sync) DrawSelection(session.Terminal);
+    }
+
+    void OnPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        ReleasePointerCapture(e.Pointer);
+        if (reportButton >= 0)
+        {
+            Report(MouseAction.Release, reportButton, e);
+            reportButton = -1;
+        }
+        else if (selecting)
+        {
+            selecting = false;
+            // Warp and Windows Terminal: a mouse selection is copied as soon as it is made.
+            if (Theme.Settings.CopyOnSelect) Copy(keepSelection: true);
+        }
+        // Something after the press moved focus away (reported: typing died after every click, and worked only
+        // while the button was held). Take it back once the click has finished.
+        DispatcherQueue.TryEnqueue(() => { if (!hasFocus) Focus(FocusState.Pointer); });
+    }
+
+    // ---- drag and drop -----------------------------------------------------------------------
+
+    void OnDragOver(object sender, DragEventArgs e)
+    {
+        if (!session.Started || session.Exited) return;
+        if (e.DataView.Contains(StandardDataFormats.StorageItems) || e.DataView.Contains(StandardDataFormats.Text))
+        {
+            e.AcceptedOperation = DataPackageOperation.Copy;
+            e.DragUIOverride.Caption = "Insert path";
+        }
+    }
+
+    /// <summary>Files from the armux explorer or Windows Explorer are typed as paths; other text is pasted.</summary>
+    async void OnDrop(object sender, DragEventArgs e)
+    {
+        var deferral = e.GetDeferral();
+        try
+        {
+            List<string> paths = [];
+            if (e.DataView.Properties.TryGetValue(ExplorerPanel.DragPathKey, out var p) && p is string armuxPath) paths.Add(armuxPath);
+            else if (e.DataView.Contains(StandardDataFormats.StorageItems))
+                foreach (var item in await e.DataView.GetStorageItemsAsync()) paths.Add(item.Path);
+            if (paths.Count > 0 && DropText is { } format) session.Paste(format(paths));
+            else if (e.DataView.Contains(StandardDataFormats.Text)) session.Paste(await e.DataView.GetTextAsync());
+            Focus(FocusState.Pointer);
+        }
+        catch (Exception ex) { App.Log(nameof(OnDrop), ex); }
+        finally { deferral.Complete(); }
     }
 
     void ShowMenu(PointerRoutedEventArgs e)
@@ -320,8 +408,8 @@ public sealed partial class TerminalView : UserControl
         menu.ShowAt(this, e.GetCurrentPoint(this).Position);
     }
 
-    /// <summary>Copies the selection (Ctrl+Shift+C) and clears it. Returns false when nothing is selected.</summary>
-    public bool Copy()
+    /// <summary>Copies the selection (Ctrl+Shift+C) and clears it, unless it is the automatic copy of a fresh selection. Returns false when nothing is selected.</summary>
+    public bool Copy(bool keepSelection = false)
     {
         if (Ordered() is not { } s) return false;
         string text;
@@ -329,6 +417,7 @@ public sealed partial class TerminalView : UserControl
         var data = new DataPackage();
         data.SetText(text);
         Clipboard.SetContent(data);
+        if (keepSelection) return true;
         selA = selB = null;
         lock (session.Terminal.Sync) DrawSelection(session.Terminal);
         return true;
@@ -339,9 +428,9 @@ public sealed partial class TerminalView : UserControl
     {
         var view = Clipboard.GetContent();
         if (!view.Contains(StandardDataFormats.Text)) return;
-        var text = (await view.GetTextAsync()).Replace("\r\n", "\r").Replace('\n', '\r');
-        if (session.Terminal.BracketedPaste) text = "\u001b[200~" + text.Replace("\u001b[201~", "") + "\u001b[201~";
-        SendInput(text);
+        var text = await view.GetTextAsync();
+        if (!follow) { follow = true; Render(force: false); }
+        session.Paste(text);
     }
 
     // ---- input -------------------------------------------------------------------------------
@@ -355,19 +444,37 @@ public sealed partial class TerminalView : UserControl
 
     void OnWheel(object sender, PointerRoutedEventArgs e)
     {
-        int notches = e.GetCurrentPoint(this).Properties.MouseWheelDelta / 120;
-        if (notches == 0) return;
         e.Handled = true;
+        // Precision touchpads send deltas below one notch (120); add them up so slow scrolls still move.
+        wheelAccum += e.GetCurrentPoint(this).Properties.MouseWheelDelta;
+        int notches = wheelAccum / 120;
+        if (Down(VirtualKey.Control))
+        {
+            if (notches != 0) { wheelAccum -= notches * 120; ZoomRequested?.Invoke(Math.Sign(notches)); }
+            return;
+        }
         var term = session.Terminal;
+        if (Reporting(e))
+        {
+            if (notches == 0) return;
+            wheelAccum -= notches * 120;
+            for (int i = 0; i < Math.Abs(notches); i++) Report(notches > 0 ? MouseAction.WheelUp : MouseAction.WheelDown, -1, e);
+            return;
+        }
+        // Scrollback moves a line per 40 units: 3 lines per notch, and smooth on touchpads.
+        int lines = wheelAccum / 40;
+        if (lines == 0) return;
+        wheelAccum -= lines * 40;
+        notches = lines;
         if (term.AltScreen)
         {
             // Full-screen programs without mouse support scroll with the arrow keys.
             string key = notches > 0 ? (term.AppCursorKeys ? "\u001bOA" : "\u001b[A") : (term.AppCursorKeys ? "\u001bOB" : "\u001b[B");
-            session.Send(string.Concat(Enumerable.Repeat(key, Math.Abs(notches) * 3)));
+            session.Send(string.Concat(Enumerable.Repeat(key, Math.Abs(notches))));
             return;
         }
         int sb = ScrollbackCount();
-        viewTop = Math.Clamp(viewTop - notches * 3, 0, sb);
+        viewTop = Math.Clamp(viewTop - notches, 0, sb);
         follow = viewTop >= sb;
         Render(force: false);
     }

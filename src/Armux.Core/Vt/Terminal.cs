@@ -36,6 +36,13 @@ public sealed class Terminal : IVtHandler
     public bool BracketedPaste { get; private set; }
     public bool FocusReporting { get; private set; }
     public bool AltScreen { get; private set; }
+    /// <summary>Mouse reporting the program asked for (DECSET 1000 / 1002 / 1003); None means the terminal selects text.</summary>
+    public MouseTracking Mouse { get; private set; }
+    /// <summary>DECSET 1006: mouse reports use the SGR encoding.</summary>
+    public bool SgrMouse { get; private set; }
+    /// <summary>OSC 9;4 progress (ConEmu, Windows Terminal): 0 none, 1 normal, 2 error, 3 indeterminate, 4 paused.</summary>
+    public int ProgressState { get; private set; }
+    public int ProgressValue { get; private set; }
     public string Title { get; private set; } = "";
     /// <summary>Increases on every change. Renderers compare it to skip work.</summary>
     public long Version { get; private set; }
@@ -49,6 +56,12 @@ public sealed class Terminal : IVtHandler
     public event Action? Bell;
     /// <summary>Bytes the terminal must send back to the program (device status and attribute reports).</summary>
     public event Action<string>? Reply;
+    /// <summary>OSC 9;4 changed <see cref="ProgressState"/> or <see cref="ProgressValue"/>.</summary>
+    public event Action? ProgressChanged;
+
+    /// <summary>Colors reported to OSC 10 / 11 queries (programs pick light or dark themes from them), as 0xRRGGBB.</summary>
+    public uint ReportedForeground { get; set; } = 0xD4D4D4;
+    public uint ReportedBackground { get; set; } = 0x262626;
 
     public Terminal(int cols, int rows, int scrollbackLines = 5000)
     {
@@ -423,11 +436,34 @@ public sealed class Terminal : IVtHandler
             case "7":
                 if (FileUrlToPath(rest) is { } path) Later(() => CwdChanged?.Invoke(path));
                 break;
+            case "9" when rest.StartsWith("4;", StringComparison.Ordinal) || rest == "4":
+                Progress(rest);
+                break;
             case "9": case "99": case "777":
                 if (notifications.Handle(data) is { } n) Later(() => Notified?.Invoke(n));
                 break;
+            case "10" when rest == "?":
+                Later(() => Reply?.Invoke($"\x1b]10;{XColor(ReportedForeground)}\x1b\\"));
+                break;
+            case "11" when rest == "?":
+                Later(() => Reply?.Invoke($"\x1b]11;{XColor(ReportedBackground)}\x1b\\"));
+                break;
             // OSC 8 hyperlinks, OSC 52 clipboard (not allowed: programs could read or replace it) and others are ignored.
         }
+    }
+
+    static string XColor(uint rgb) => $"rgb:{(rgb >> 16) & 0xFF:x2}{(rgb >> 16) & 0xFF:x2}/{(rgb >> 8) & 0xFF:x2}{(rgb >> 8) & 0xFF:x2}/{rgb & 0xFF:x2}{rgb & 0xFF:x2}";
+
+    /// <summary>OSC 9;4;state;value. State 0 clears; value is a percentage.</summary>
+    void Progress(string rest)
+    {
+        var parts = rest.Split(';');
+        int state = parts.Length > 1 && int.TryParse(parts[1], out var st) ? Math.Clamp(st, 0, 4) : 0;
+        int value = parts.Length > 2 && int.TryParse(parts[2], out var v) ? Math.Clamp(v, 0, 100) : 0;
+        if (state == ProgressState && value == ProgressValue) return;
+        ProgressState = state;
+        ProgressValue = value;
+        Later(() => ProgressChanged?.Invoke());
     }
 
     /// <summary>"file://host/C:/dir" or "file:///C:/dir" to "C:\dir". Null for anything else.</summary>
@@ -576,8 +612,12 @@ public sealed class Terminal : IVtHandler
                 else { SetAltScreen(false, clear: false); RestoreCursor(); }
                 break;
             case 1004: FocusReporting = on; break;
+            case 1000: Mouse = on ? MouseTracking.Click : MouseTracking.None; break;
+            case 1002: Mouse = on ? MouseTracking.Drag : MouseTracking.None; break;
+            case 1003: Mouse = on ? MouseTracking.Any : MouseTracking.None; break;
+            case 1006: SgrMouse = on; break;
             case 2004: BracketedPaste = on; break;
-            // 9001 (win32-input-mode, requested by ConPTY), mouse modes and 2026 (synchronized output) are not supported.
+            // 9001 (win32-input-mode, requested by ConPTY), 1005/1015 mouse encodings and 2026 (synchronized output) are not supported.
         }
     }
 
@@ -598,7 +638,8 @@ public sealed class Terminal : IVtHandler
         for (int y = 0; y < Rows; y++) { Fill(main[y], 0, Cols); mainWrap[y] = false; }
         scrollback.Clear();
         cx = cy = 0; top = 0; bottom = Rows - 1;
-        wrapPending = lineDrawing = InsertMode = AppCursorKeys = BracketedPaste = FocusReporting = false;
+        wrapPending = lineDrawing = InsertMode = AppCursorKeys = BracketedPaste = FocusReporting = SgrMouse = false;
+        Mouse = MouseTracking.None;
         AutoWrap = CursorVisible = true;
         tabs = NewTabs(Cols);
     }
@@ -674,6 +715,9 @@ public sealed class Terminal : IVtHandler
         '⎺', '⎻', '─', '⎼', '⎽', '├', '┤', '┴', '┬', '│', '≤', '≥', 'π', '≠', '£', '·',
     ];
 }
+
+/// <summary>Mouse reporting modes, from least to most events.</summary>
+public enum MouseTracking { None, Click, Drag, Any }
 
 /// <summary>A scrollback line stored compactly: its text plus the columns where the attributes change.</summary>
 public readonly record struct PackedLine(string Text, (int Col, Attr Attr)[] Runs, bool Wrapped)

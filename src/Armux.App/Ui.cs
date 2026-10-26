@@ -22,7 +22,7 @@ public static class Ui
         Text = text,
         FontSize = size,
         Foreground = fg,
-        FontFamily = new FontFamily(Theme.UiFont),
+        FontFamily = new FontFamily(semibold ? Theme.UiFontSemibold : Theme.UiFont),
         FontWeight = semibold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
         TextTrimming = TextTrimming.CharacterEllipsis,
         TextWrapping = TextWrapping.NoWrap,

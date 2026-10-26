@@ -41,9 +41,15 @@ public sealed partial class MainWindow
             ["PATH"] = AppContext.BaseDirectory.TrimEnd('\\') + ";" + Environment.GetEnvironmentVariable("PATH"),
         };
         s = new TerminalSession(surface, DispatcherQueue, cwd, env);
+        // Programs that ask for the colors (OSC 10 / 11; Claude Code does) pick a matching light or dark theme.
+        s.Terminal.ReportedBackground = Theme.Dark ? 0x262626u : 0xFFFFFFu;
+        s.Terminal.ReportedForeground = Theme.Dark ? 0xD4D4D4u : 0x1F1F1Fu;
         s.Notified += n => OnTerminalNotification(surface, n);
         s.CwdChanged += path => OnTerminalCwd(surface, path);
         s.ProcessExited += _ => OnProcessExited(surface);
+        s.StateChanged += UpdateTaskbar;
+        // The bell is how Claude Code (and many programs) ask for attention when no OSC notification is configured.
+        s.Bell += () => OnTerminalNotification(surface, new TermNotification("", "Needs your attention"));
         sessions[surface] = s;
         return s;
     }
@@ -51,6 +57,38 @@ public sealed partial class MainWindow
     void DisposeSession(Surface surface)
     {
         if (sessions.Remove(surface, out var s)) s.Dispose();
+        editors.Remove(surface);
+    }
+
+    /// <summary>One prompt editor per terminal, kept while closed so its draft survives.</summary>
+    readonly Dictionary<Surface, PromptEditor> editors = [];
+
+    /// <summary>Ctrl+G: open or close the prompt editor under the focused terminal.</summary>
+    void TogglePromptEditor()
+    {
+        if (Focused is not { Selected: { Live: true } surface } pane) return;
+        var view = ViewOf(pane);
+        if (view.EditorOpen) { CloseEditor(surface); return; }
+        if (!editors.TryGetValue(surface, out var editor))
+        {
+            editors[surface] = editor = new PromptEditor();
+            editor.Submitted += (text, enter) =>
+            {
+                var session = SessionFor(surface);
+                session.Paste(text);
+                if (enter) session.Send("\r");
+                CloseEditor(surface);
+            };
+            editor.CloseRequested += () => CloseEditor(surface);
+        }
+        view.ShowEditor(editor);
+        DispatcherQueue.TryEnqueue(editor.FocusText);
+    }
+
+    void CloseEditor(Surface surface)
+    {
+        if (Locate(surface) is { } at && paneViews.TryGetValue(at.Pane, out var v)) v.ShowEditor(null);
+        FocusKeys();
     }
 
     /// <summary>OSC 9 / 99 / 777: the ring, badge and notification list, plus a Windows toast when armux is in the background.</summary>
@@ -133,6 +171,46 @@ public sealed partial class MainWindow
     Surface? Target(Request r) => r.Surface > 0
         ? state.Workspaces.SelectMany(w => w.Panes).SelectMany(p => p.Surfaces).FirstOrDefault(s => s.Id == r.Surface)
         : Focused?.Selected;
+
+    /// <summary>
+    /// The taskbar shows the current workspace only: yellow when a tab in it needs input (an unread notification),
+    /// a green bar while a program in it works, red on an OSC 9;4 error, nothing when idle.
+    /// </summary>
+    void UpdateTaskbar()
+    {
+        if (state.Current is not { } ws) return;
+        var surfaces = ws.Panes.SelectMany(p => p.Surfaces).ToList();
+        var status = surfaces.Any(s => s.Unread) ? AgentState.NeedsInput
+            : AgentStatus.Max(surfaces.Select(s => sessions.TryGetValue(s, out var t) ? t.State : AgentState.Idle));
+        Taskbar.Show(WinRT.Interop.WindowNative.GetWindowHandle(this), status);
+    }
+
+    /// <summary>
+    /// Text typed for files dropped on a terminal: each path relative to the terminal's directory when it is inside
+    /// it (otherwise absolute), quoted for the shell when needed, separated by spaces.
+    /// </summary>
+    string DropText(Surface surface, IReadOnlyList<string> paths)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string? cwd = sessions.GetValueOrDefault(surface)?.Cwd
+            ?? (Locate(surface)?.Ws.Cwd is { } c ? FileTree.Resolve(c, home, out _) : null);
+        bool cmd = Shells.Parse(surface.Shell) == ShellKind.Cmd;
+        return string.Join(" ", paths.Select(p => QuotePath(RelativePath(cwd, p), cmd)));
+    }
+
+    static string RelativePath(string? cwd, string path)
+    {
+        if (cwd is null) return path;
+        var rel = Path.GetRelativePath(cwd, path);
+        return rel.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(rel) ? path : rel;
+    }
+
+    static readonly char[] ShellSpecial = [' ', '&', '(', ')', ';', '\'', '$', '`', ','];
+
+    static string QuotePath(string path, bool cmd) =>
+        path.IndexOfAny(ShellSpecial) < 0 ? path
+        : cmd ? "\"" + path + "\""
+        : "'" + path.Replace("'", "''") + "'";
 
     void DisposeAllSessions()
     {

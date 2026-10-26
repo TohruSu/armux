@@ -16,18 +16,27 @@ public static class Theme
     /// <summary>Saved fonts and sizes. Change them with <see cref="UseSettings"/>, then re-render.</summary>
     public static Settings Settings { get; private set; } = new();
 
-    public static string UiFont => Settings.UiFont;
+    /// <summary>The interface font as a FontFamily source (the bundled file for IBM Plex Sans), with Segoe UI as fallback.</summary>
+    public static string UiFont => FontSource(Settings.UiFont) + ", Segoe UI Variable Text, Segoe UI";
+    /// <summary>The semibold interface font. Plex ships weights as separate files, so semibold needs its own source.</summary>
+    public static string UiFontSemibold =>
+        (Settings.UiFont.Equals(Settings.DefaultUiFont, StringComparison.OrdinalIgnoreCase) ? BundledPlexSemibold : Settings.UiFont)
+        + ", Segoe UI Variable Text, Segoe UI";
     public static double TerminalFontSize => Settings.TerminalFontSize;
 
-    /// <summary>The bundled copy of Zed's default font, loaded from the app folder.</summary>
+    /// <summary>Bundled copies of Zed's default fonts (.ZedMono = Lilex, .ZedSans = IBM Plex Sans), loaded from the app folder.</summary>
     const string BundledLilex = "ms-appx:///Assets/Fonts/Lilex-VF.ttf#Lilex";
+    const string BundledPlex = "ms-appx:///Assets/Fonts/IBMPlexSans-Regular.ttf#IBM Plex Sans";
+    const string BundledPlexSemibold = "ms-appx:///Assets/Fonts/IBMPlexSans-SemiBold.ttf#IBM Plex Sans";
 
     /// <summary>The terminal font with fallbacks, so a missing font or glyph still renders monospaced.</summary>
     public static FontFamily TerminalFont => new(FontSource(Settings.TerminalFont) + ", Cascadia Mono, Consolas");
 
-    /// <summary>A family name, or the bundled file for Lilex.</summary>
+    /// <summary>A family name, or the bundled file for Lilex and IBM Plex Sans.</summary>
     public static string FontSource(string family) =>
-        family.Equals(Settings.DefaultTerminalFont, StringComparison.OrdinalIgnoreCase) ? BundledLilex : family;
+        family.Equals(Settings.DefaultTerminalFont, StringComparison.OrdinalIgnoreCase) ? BundledLilex
+        : family.Equals(Settings.DefaultUiFont, StringComparison.OrdinalIgnoreCase) ? BundledPlex
+        : family;
 
     public static void UseSettings(Settings s) => Settings = s.Normalized();
 

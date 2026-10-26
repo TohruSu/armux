@@ -13,7 +13,8 @@ namespace Armux.App;
 public interface IPaneHost
 {
     bool IsFocused(Pane pane);
-    void FocusPane(Pane pane);
+    /// <summary>Makes <paramref name="pane"/> the focused pane; <paramref name="focusTerminal"/> also gives its terminal the keyboard.</summary>
+    void FocusPane(Pane pane, bool focusTerminal = true);
     void SelectSurface(Pane pane, Surface surface);
     void CloseSurface(Pane pane, Surface surface);
     void NewSurface(Pane pane, PanelKind kind);
@@ -32,6 +33,7 @@ public sealed partial class PaneView : Grid
     readonly StackPanel tabs = new() { Orientation = Orientation.Horizontal, Height = 32 };
     readonly Grid body = new();
     readonly Border ring = new() { BorderThickness = new Thickness(2), IsHitTestVisible = false };
+    readonly Border editorHost = new();
 
     public PaneView(Pane pane, IPaneHost host)
     {
@@ -40,6 +42,7 @@ public sealed partial class PaneView : Grid
         Background = Theme.Brush("Pane");
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) });
         RowDefinitions.Add(new RowDefinition());
+        RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var bar = new Grid { Background = Theme.Brush("TabBar") };
         bar.ColumnDefinitions.Add(new ColumnDefinition());
@@ -66,10 +69,13 @@ public sealed partial class PaneView : Grid
 
         SetRow(body, 1);
         Children.Add(body);
-        SetRowSpan(ring, 2);
+        SetRow(editorHost, 2);
+        Children.Add(editorHost);
+        SetRowSpan(ring, 3);
         Children.Add(ring);
 
-        AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => host.FocusPane(Pane)), true);
+        // A click anywhere in the pane focuses it; a click in the prompt editor must keep the keyboard there.
+        AddHandler(PointerPressedEvent, new PointerEventHandler((_, e) => host.FocusPane(Pane, focusTerminal: !InEditor(e.OriginalSource as DependencyObject))), true);
         pane.Surfaces.CollectionChanged += OnSurfaces;
         foreach (var s in pane.Surfaces) s.PropertyChanged += OnSurface;
         Refresh();
@@ -143,6 +149,22 @@ public sealed partial class PaneView : Grid
         g.Tapped += (_, _) => host.SelectSurface(Pane, s);
         return g;
     }
+
+    bool InEditor(DependencyObject? d)
+    {
+        for (; d is not null && !ReferenceEquals(d, this); d = VisualTreeHelper.GetParent(d))
+            if (ReferenceEquals(d, editorHost)) return true;
+        return false;
+    }
+
+    /// <summary>Shows a prompt editor under the pane's content, or removes it (null).</summary>
+    public void ShowEditor(UIElement? editor)
+    {
+        if (editor is FrameworkElement { Parent: Border old } && !ReferenceEquals(old, editorHost)) old.Child = null;
+        editorHost.Child = editor;
+    }
+
+    public bool EditorOpen => editorHost.Child is not null;
 
     /// <summary>cmux "flash focused panel": pulse the ring twice.</summary>
     public void Flash()

@@ -22,6 +22,21 @@ public sealed class StateTests
     }
 
     [TestMethod]
+    public void NotifyWhileWindowInactiveStaysUnreadUntilReturn()
+    {
+        var state = MockData.Idle();
+        var ws = state.Current!;
+        var pane = ws.Focused!;
+        state.WindowActive = false;
+        state.Notify(ws, pane, pane.Selected!, "Claude Code", "needs input");
+        Assert.IsTrue(pane.Selected!.Unread);
+        Assert.AreEqual(1, state.UnreadTotal);
+        state.WindowActive = true;
+        Assert.IsFalse(pane.Selected!.Unread);
+        Assert.AreEqual(0, state.UnreadTotal);
+    }
+
+    [TestMethod]
     public void NotifyOnVisibleSurfaceIsReadImmediately()
     {
         var state = MockData.Idle();

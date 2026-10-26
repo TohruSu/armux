@@ -36,12 +36,29 @@ public sealed class AppState : Observable
     /// Records a notification from a surface (OSC 9/99/777 or the CLI in Phase 3; mock in Phase 2).
     /// Lights the surface, its pane ring and the workspace badge unless the user is already looking at it.
     /// </summary>
+    bool windowActive = true;
+
+    /// <summary>
+    /// False while the armux window is in the background: nothing is "visible" then, so a notification from the
+    /// focused tab stays unread (taskbar and toast) until the user comes back, which reads it.
+    /// </summary>
+    public bool WindowActive
+    {
+        get => windowActive;
+        set
+        {
+            if (windowActive == value) return;
+            windowActive = value;
+            if (value && Current is { Focused.Selected: { } s } ws) MarkRead(ws, s);
+        }
+    }
+
     public Notification Notify(Workspace ws, Pane pane, Surface surface, string title, string body)
     {
         var n = new Notification(++nextNotification, ws, pane, surface, title, body, DateTime.Now);
         Notifications.Insert(0, n);
         ws.Status = body;
-        bool visible = ReferenceEquals(ws, Current) && ReferenceEquals(ws.Focused, pane) && ReferenceEquals(pane.Selected, surface);
+        bool visible = WindowActive && ReferenceEquals(ws, Current) && ReferenceEquals(ws.Focused, pane) && ReferenceEquals(pane.Selected, surface);
         if (visible) n.Read = true;
         else surface.Unread = true;
         Recount(ws);
