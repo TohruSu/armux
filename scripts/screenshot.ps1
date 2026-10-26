@@ -15,7 +15,9 @@ param(
     [string[]] $ArgumentList = @(),
     [double] $WaitSeconds = 4,
     # Optional SendKeys sequences sent after start-up, one per element (^ = Ctrl, + = Shift, % = Alt).
-    [string[]] $Keys = @()
+    [string[]] $Keys = @(),
+    # Optional mouse clicks after the keys, "x,y" or "x,y,right", in physical pixels from the window's top-left.
+    [string[]] $Clicks = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,9 +28,20 @@ if (-not ('Shot.Native' -as [type])) {
 [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
 [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, IntPtr extra);
 [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT rect, int size);
 public struct RECT { public int Left, Top, Right, Bottom; }
 '@
+}
+
+# Keys and clicks go to whatever window is in front. Windows can refuse SetForegroundWindow (for example while
+# the user is typing), so check before every injected input and stop rather than type into another app.
+function Assert-Foreground($hwnd) {
+    [Shot.Native]::SetForegroundWindow($hwnd) | Out-Null
+    Start-Sleep -Milliseconds 150
+    if ([Shot.Native]::GetForegroundWindow() -ne $hwnd) { throw "The app window is not in the foreground; stopped before sending input to another window." }
 }
 
 # Physical pixels: without this, GetWindowRect returns scaled coordinates and the capture is cropped.
@@ -47,7 +60,7 @@ try {
     if ($Keys) {
         Add-Type -AssemblyName System.Windows.Forms
         foreach ($k in $Keys) {
-            [Shot.Native]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
+            Assert-Foreground $p.MainWindowHandle
             [System.Windows.Forms.SendKeys]::SendWait($k)
             Start-Sleep -Milliseconds 600
         }
@@ -58,6 +71,15 @@ try {
     $v = [Shot.Native+RECT]::new()
     [Shot.Native]::GetWindowRect($p.MainWindowHandle, [ref]$r) | Out-Null
     [Shot.Native]::DwmGetWindowAttribute($p.MainWindowHandle, 9, [ref]$v, 16) | Out-Null
+    foreach ($c in $Clicks) {
+        $x, $y, $button = $c.Split(',')
+        Assert-Foreground $p.MainWindowHandle
+        [Shot.Native]::SetCursorPos($v.Left + [int]$x, $v.Top + [int]$y) | Out-Null
+        $down, $up = if ($button -eq 'right') { 0x8, 0x10 } else { 0x2, 0x4 }
+        [Shot.Native]::mouse_event($down, 0, 0, 0, [IntPtr]::Zero)
+        [Shot.Native]::mouse_event($up, 0, 0, 0, [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 900
+    }
     $full = [System.Drawing.Bitmap]::new($r.Right - $r.Left, $r.Bottom - $r.Top)
     $g = [System.Drawing.Graphics]::FromImage($full)
     $hdc = $g.GetHdc()
