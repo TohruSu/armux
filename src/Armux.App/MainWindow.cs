@@ -10,10 +10,10 @@ using Microsoft.UI.Xaml.Media;
 namespace Armux.App;
 
 /// <summary>
-/// The armux window: title bar (sidebar toggle, notifications bell, new workspace, workspace title),
-/// the vertical workspace sidebar, and the split-pane area of the current workspace.
+/// The armux window: title bar (sidebar toggle, explorer toggle, notifications bell, new workspace, workspace title),
+/// the vertical workspace sidebar, the optional file explorer beside it, and the split-pane area of the current workspace.
 /// </summary>
-public sealed partial class MainWindow : Window, IPaneHost
+public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 {
     const double SidebarWidth = 280;
 
@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window, IPaneHost
     readonly Grid titleRow = new();
     readonly ColumnDefinition titleLeft = new();
     readonly ColumnDefinition sidebarCol = new() { Width = new GridLength(SidebarWidth) };
+    readonly ColumnDefinition explorerCol = new() { Width = new GridLength(0) };
     readonly StackPanel sidebarList = new() { Padding = new Thickness(0, 4, 0, 12) };
     readonly Grid content = new();
     readonly Grid dragRegion = new();
@@ -31,6 +32,11 @@ public sealed partial class MainWindow : Window, IPaneHost
     readonly Border bellBadge = new();
     readonly TextBlock bellCount = new();
     readonly CommandPalette palette = new();
+    /// <summary>
+    /// Holds keyboard focus for the pane area, so shortcuts keep working after re-renders destroy the focused
+    /// element. Phase 3's terminal control takes this role.
+    /// </summary>
+    readonly ContentControl keySink = new() { IsTabStop = true, UseSystemFocusVisuals = false, Width = 0, Height = 0 };
     Button bellButton = null!;
     Flyout bellFlyout = null!;
     readonly Dictionary<Pane, PaneView> paneViews = [];
@@ -74,15 +80,19 @@ public sealed partial class MainWindow : Window, IPaneHost
 
         var bodyGrid = new Grid();
         bodyGrid.ColumnDefinitions.Add(sidebarCol);
+        bodyGrid.ColumnDefinitions.Add(explorerCol);
         bodyGrid.ColumnDefinitions.Add(new ColumnDefinition());
         bodyGrid.Children.Add(new ScrollViewer { Content = sidebarList, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        Grid.SetColumn(content, 1);
+        Grid.SetColumn(explorerHost, 1);
+        bodyGrid.Children.Add(explorerHost);
+        Grid.SetColumn(content, 2);
         bodyGrid.Children.Add(content);
         Grid.SetRow(bodyGrid, 1);
         root.Children.Add(bodyGrid);
 
         Grid.SetRowSpan(palette, 2);
         root.Children.Add(palette);
+        root.Children.Add(keySink);
     }
 
     void BuildTitleRow()
@@ -93,6 +103,8 @@ public sealed partial class MainWindow : Window, IPaneHost
 
         var left = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(Ui.IconButton(Ui.SidebarIcon(dim), "Toggle sidebar (Ctrl+Shift+B)", ToggleSidebar));
+        explorerButton = Ui.IconButton(Ui.Glyph(Ui.Explorer, 14, dim), "File explorer (Ctrl+Shift+E)", ToggleExplorer);
+        left.Children.Add(explorerButton);
 
         var bell = new Grid();
         bell.Children.Add(Ui.Glyph(Ui.Bell, 14, dim));
@@ -113,7 +125,7 @@ public sealed partial class MainWindow : Window, IPaneHost
         if (bellBadge.Parent is Panel oldParent) oldParent.Children.Remove(bellBadge);
         bell.Children.Add(bellBadge);
         bellButton = Ui.IconButton(bell, "Notifications (Ctrl+Shift+I)", () => bellFlyout.ShowAt(bellButton));
-        bellFlyout = new Flyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft, ShouldConstrainToRootBounds = true, FlyoutPresenterStyle = SolidPresenter(typeof(FlyoutPresenter)) };
+        bellFlyout = new Flyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft, ShouldConstrainToRootBounds = true, FlyoutPresenterStyle = Ui.SolidPresenter(typeof(FlyoutPresenter)) };
         bellFlyout.Opening += (_, _) => bellFlyout.Content = NotificationsList();
         left.Children.Add(bellButton);
         left.Children.Add(Ui.IconButton(Ui.Glyph(Ui.Add, 13, dim), "New workspace (Ctrl+Shift+N)", NewWorkspace));
@@ -127,6 +139,8 @@ public sealed partial class MainWindow : Window, IPaneHost
         titleText.FontFamily = new FontFamily(Theme.UiFont);
         titleText.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         titleText.Foreground = Theme.Brush("Text");
+        // titleText outlives rebuilds (theme or font change); detach it from the previous title row first.
+        if (titleText.Parent is Panel oldTitle) oldTitle.Children.Remove(titleText);
         title.Children.Add(titleText);
         dragRegion.Children.Add(title);
         Grid.SetColumn(dragRegion, 1);
@@ -146,7 +160,7 @@ public sealed partial class MainWindow : Window, IPaneHost
         var ws = state.Current;
         titleText.Text = ws is null ? "armux" : ws.Zoomed is null ? ws.Title : $"{ws.Title}  ·  zoomed";
         Title = ws is null ? "armux" : $"{ws.Title} - armux";
-        titleLeft.Width = new GridLength(sidebarVisible ? SidebarWidth : 120);
+        titleLeft.Width = new GridLength(sidebarVisible ? SidebarWidth : 150);
     }
 
     void UpdateBell()
@@ -171,8 +185,10 @@ public sealed partial class MainWindow : Window, IPaneHost
             if (panel is not BrowserPanel) panels.Remove(s);
         RenderSidebar();
         RenderContent();
+        RenderExplorer(rebuild: true);
         UpdateTitle();
         UpdateBell();
+        FocusKeys();
     }
 
     void RenderSidebar()
@@ -198,6 +214,8 @@ public sealed partial class MainWindow : Window, IPaneHost
         content.Children.Add(tree);
         foreach (var pane in ws.Panes) ViewOf(pane).Refresh();
         UpdateTitle();
+        // Moving pane views out of the tree drops keyboard focus; keep shortcuts working.
+        if (!palette.IsOpen) FocusKeys();
     }
 
     FrameworkElement Build(PaneNode node)
@@ -251,6 +269,8 @@ public sealed partial class MainWindow : Window, IPaneHost
     // ---- IPaneHost --------------------------------------------------------------------------
 
     public bool IsFocused(Pane pane) => ReferenceEquals(state.Current?.Focused, pane);
+
+    void FocusKeys() => DispatcherQueue.TryEnqueue(() => keySink.Focus(FocusState.Programmatic));
 
     public void FocusPane(Pane pane)
     {
@@ -309,7 +329,12 @@ public sealed partial class MainWindow : Window, IPaneHost
     public FrameworkElement PanelFor(Surface surface)
     {
         if (!panels.TryGetValue(surface, out var p))
-            panels[surface] = p = surface.Kind == PanelKind.Browser ? new BrowserPanel(surface, browsers) : new TerminalView(surface);
+            panels[surface] = p = surface.Kind switch
+            {
+                PanelKind.Browser => new BrowserPanel(surface, browsers),
+                PanelKind.File => new FileView(surface),
+                _ => new TerminalView(surface),
+            };
         return p;
     }
 
@@ -320,6 +345,7 @@ public sealed partial class MainWindow : Window, IPaneHost
         if (ReferenceEquals(state.Current, ws)) return;
         state.Current = ws;
         RenderContent();
+        RenderExplorer(rebuild: false);
     }
 
     void NewWorkspace()
@@ -354,7 +380,7 @@ public sealed partial class MainWindow : Window, IPaneHost
 
     void ShowWorkspaceMenu(Workspace ws, FrameworkElement anchor)
     {
-        var menu = new MenuFlyout { ShouldConstrainToRootBounds = true, MenuFlyoutPresenterStyle = SolidPresenter(typeof(MenuFlyoutPresenter)) };
+        var menu = new MenuFlyout { ShouldConstrainToRootBounds = true, MenuFlyoutPresenterStyle = Ui.SolidPresenter(typeof(MenuFlyoutPresenter)) };
         void Add(MenuFlyoutItemBase item) => menu.Items.Add(item);
         MenuFlyoutItem Item(string text, Action run) { var i = new MenuFlyoutItem { Text = text }; i.Click += (_, _) => run(); return i; }
 
@@ -373,7 +399,7 @@ public sealed partial class MainWindow : Window, IPaneHost
         {
             ShouldConstrainToRootBounds = true,
             Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.RightEdgeAlignedTop,
-            FlyoutPresenterStyle = SolidPresenter(typeof(FlyoutPresenter)),
+            FlyoutPresenterStyle = Ui.SolidPresenter(typeof(FlyoutPresenter)),
         };
         var grid = new Grid { RowSpacing = 8, ColumnSpacing = 8 };
         const int perRow = 6;
@@ -407,15 +433,6 @@ public sealed partial class MainWindow : Window, IPaneHost
         body.Children.Add(buttons);
         flyout.Content = body;
         flyout.ShowAt(anchor);
-    }
-
-    /// <summary>Solid themed popup background. The default acrylic does not survive window capture.</summary>
-    static Style SolidPresenter(Type target)
-    {
-        var s = new Style(target);
-        s.Setters.Add(new Setter(Control.BackgroundProperty, Theme.Brush("Palette")));
-        s.Setters.Add(new Setter(Control.BorderBrushProperty, Theme.Brush("Border")));
-        return s;
     }
 
     async Task RenameAsync(Workspace ws)
@@ -519,9 +536,12 @@ public sealed partial class MainWindow : Window, IPaneHost
         }
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRender;
 
+        FocusKeys();
         if (opts.Select > 0 && opts.Select <= state.Workspaces.Count) SelectWorkspace(state.Workspaces[opts.Select - 1]);
         if (opts.Zoom) ToggleZoom();
+        if (opts.Explorer) ToggleExplorer();
         if (opts.Palette) OpenPalette();
+        if (opts.Settings) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _ = OpenSettingsAsync());
         if (opts.Notifications) bellFlyout.ShowAt(bellButton);
         if (opts.Menu && sidebarList.Children.Count > 1 && sidebarList.Children[1] is SidebarRow row)
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ShowWorkspaceMenu(state.Workspaces[1], row));
@@ -538,6 +558,7 @@ public sealed partial class MainWindow : Window, IPaneHost
                     foreach (var pane in ws.Panes.ToList())
                         foreach (var s in pane.Surfaces.Where(s => s.Kind == PanelKind.Browser).ToList())
                             CloseSurface(pane, s);
+                CloseExplorer();
             };
             t.Start();
         }

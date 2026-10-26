@@ -31,8 +31,10 @@ public sealed partial class MainWindow
     {
         // Workspaces
         Cmd("New Workspace", "Ctrl+Shift+N", NewWorkspace);
-        Cmd("Next Workspace", "Alt+Shift+]", () => CycleWorkspace(1));
-        Cmd("Previous Workspace", "Alt+Shift+[", () => CycleWorkspace(-1));
+        Cmd("Next Workspace", "Ctrl+PageDown", () => CycleWorkspace(1));
+        Cmd("Previous Workspace", "Ctrl+PageUp", () => CycleWorkspace(-1));
+        Key("Alt+Shift+]", () => CycleWorkspace(1));
+        Key("Alt+Shift+[", () => CycleWorkspace(-1));
         Cmd("Close Workspace", "Ctrl+Alt+Shift+W", () => { if (Ws is { } w) CloseWorkspace(w); });
         Cmd("Rename Workspace…", "Ctrl+Alt+Shift+R", () => { if (Ws is { } w) _ = RenameAsync(w); });
         Cmd("Pin or Unpin Workspace", "", () => { if (Ws is { } w) { w.Pinned = !w.Pinned; state.SortPinned(); } });
@@ -44,8 +46,13 @@ public sealed partial class MainWindow
         Cmd("Workspace Indicator: Underline", "", () => state.Indicator = IndicatorStyle.Underline);
         Cmd("Workspace Indicator: None", "", () => state.Indicator = IndicatorStyle.None);
         Cmd("Toggle Sidebar", "Ctrl+Shift+B", ToggleSidebar);
-        for (int i = 1; i <= 8; i++) { int n = i; Key($"Ctrl+Shift+{n}", () => JumpWorkspace(n - 1)); }
-        Key("Ctrl+Shift+9", () => JumpWorkspace(state.Workspaces.Count - 1));
+        Cmd("Toggle File Explorer", "Ctrl+Shift+E", ToggleExplorer);
+        // Ctrl+1-9 (requested in review, D-14) and cmux's mapped Ctrl+Shift+1-9 both jump to a workspace.
+        foreach (var mods in new[] { "Ctrl", "Ctrl+Shift" })
+        {
+            for (int i = 1; i <= 8; i++) { int n = i; Key($"{mods}+{n}", () => JumpWorkspace(n - 1)); }
+            Key($"{mods}+9", () => JumpWorkspace(state.Workspaces.Count - 1));
+        }
 
         // Surfaces
         Cmd("New Terminal Tab", "Ctrl+Shift+T", () => { if (Focused is { } p) NewSurface(p, PanelKind.Terminal); });
@@ -59,6 +66,8 @@ public sealed partial class MainWindow
         // Splits
         Cmd("Split Right", "Ctrl+Shift+D", () => { if (Focused is { } p) SplitPane(p, SplitDirection.Right); });
         Cmd("Split Down", "Ctrl+Alt+Shift+D", () => { if (Focused is { } p) SplitPane(p, SplitDirection.Down); });
+        Cmd("Focus Next Pane", "F6", () => CyclePane(1));
+        Cmd("Focus Previous Pane", "Shift+F6", () => CyclePane(-1));
         Cmd("Focus Pane Left", "Ctrl+Alt+Left", () => FocusDir(Direction.Left));
         Cmd("Focus Pane Right", "Ctrl+Alt+Right", () => FocusDir(Direction.Right));
         Cmd("Focus Pane Up", "Ctrl+Alt+Up", () => FocusDir(Direction.Up));
@@ -94,11 +103,15 @@ public sealed partial class MainWindow
             panels.Remove(s);
             ViewOf(Focused).Refresh();
         });
+        Cmd("Settings…", "Ctrl+Shift+,", () => _ = OpenSettingsAsync());
+        Cmd("Increase Font Size", "Ctrl+Shift+=", () => ChangeFontSize(1));
+        Cmd("Decrease Font Size", "Ctrl+Shift+-", () => ChangeFontSize(-1));
+        Cmd("Reset Font Size", "Ctrl+Shift+0", () => ChangeFontSize(0));
         Cmd("Theme: Dark", "", () => SetTheme(true));
         Cmd("Theme: Light", "", () => SetTheme(false));
         Cmd("Theme: Match Windows", "", () => SetTheme(new Windows.UI.ViewManagement.UISettings()
             .GetColorValue(Windows.UI.ViewManagement.UIColorType.Background).R < 128));
-        Cmd("New Window", "Ctrl+Alt+Shift+N", () => new MainWindow(opts with { Scenario = "idle", Palette = false, Notifications = false, Zoom = false, Menu = false, Colors = false, Select = 0 }).Activate());
+        Cmd("New Window", "Ctrl+Alt+Shift+N", () => new MainWindow(opts with { Scenario = "idle", Palette = false, Notifications = false, Zoom = false, Menu = false, Colors = false, Explorer = false, Settings = false, Select = 0 }).Activate());
         Cmd("Command Palette", "Ctrl+Shift+P", OpenPalette);
 
         root.PreviewKeyDown += OnKey;
@@ -111,7 +124,7 @@ public sealed partial class MainWindow
         for (int i = 0; i < state.Workspaces.Count; i++)
         {
             var w = state.Workspaces[i];
-            list.Add(new Command($"ws:{w.Id}", $"Go to Workspace: {w.Title}", i < 8 ? $"Ctrl+Shift+{i + 1}" : "", () => SelectWorkspace(w)));
+            list.Add(new Command($"ws:{w.Id}", $"Go to Workspace: {w.Title}", i < 8 ? $"Ctrl+{i + 1}" : "", () => SelectWorkspace(w)));
         }
         palette.Open(list);
     }
@@ -133,6 +146,9 @@ public sealed partial class MainWindow
         VirtualKey.Right => "RIGHT",
         VirtualKey.Up => "UP",
         VirtualKey.Down => "DOWN",
+        VirtualKey.PageUp => "PAGEUP",
+        VirtualKey.PageDown => "PAGEDOWN",
+        VirtualKey.F6 => "F6",
         _ => null,
     };
 
@@ -171,6 +187,15 @@ public sealed partial class MainWindow
     {
         if (Focused is not { } p || p.Surfaces.Count == 0) return;
         SelectSurface(p, p.Surfaces[Math.Min(index, p.Surfaces.Count - 1)]);
+    }
+
+    /// <summary>F6 / Shift+F6: focus the next or previous pane in layout order (left to right, top to bottom).</summary>
+    void CyclePane(int delta)
+    {
+        if (Ws is not { } w || w.Zoomed is not null || Focused is not { } p) return;
+        var panes = w.Panes.ToList();
+        if (panes.Count < 2) return;
+        FocusPane(panes[(panes.IndexOf(p) + delta + panes.Count) % panes.Count]);
     }
 
     void FocusDir(Direction d)

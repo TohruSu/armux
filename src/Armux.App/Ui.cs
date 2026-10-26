@@ -11,6 +11,9 @@ public static class Ui
     public const string Bell = "", Add = "", Back = "", Forward = "", Refresh = "",
         Close = "", Folder = "", Terminal = "", Globe = "", Pin = "", Search = "";
 
+    public const string Explorer = "\uEC50", FolderOpen = "\uE838", ChevronRight = "\uE76C", ChevronDown = "\uE70D",
+        ChevronUp = "\uE70E", Document = "\uE8A5", Code = "\uE943", Photo = "\uE91B", Gear = "\uE713", Page = "\uE7C3";
+
     public static FontIcon Glyph(string glyph, double size, Brush fg) =>
         new() { Glyph = glyph, FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = size, Foreground = fg };
 
@@ -38,8 +41,19 @@ public static class Ui
             CornerRadius = new CornerRadius(5),
         };
         ToolTipService.SetToolTip(b, tip);
+        // Icon-only buttons need a name for screen readers (and UI Automation tests).
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b, tip);
         b.Click += (_, _) => click();
         return b;
+    }
+
+    /// <summary>Solid themed popup background. The default acrylic does not survive window capture.</summary>
+    public static Style SolidPresenter(Type target)
+    {
+        var s = new Style(target);
+        s.Setters.Add(new Setter(Control.BackgroundProperty, Theme.Brush("Palette")));
+        s.Setters.Add(new Setter(Control.BorderBrushProperty, Theme.Brush("Border")));
+        return s;
     }
 
     /// <summary>Outlined rectangle with an inner divider: the split-right / split-down / sidebar icons.</summary>

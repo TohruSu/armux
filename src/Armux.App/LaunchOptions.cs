@@ -6,12 +6,14 @@ namespace Armux.App;
 /// Command-line switches for mock scenarios. They make screenshots and memory measurements reproducible.
 ///   --scenario demo|idle|panes|browser   (default demo)
 ///   --panes N            terminal panes for the "panes" scenario
-///   --close-after MS     close the browser panel after MS (browser scenario)
+///   --close-after MS     close browser panels and the explorer after MS
 ///   --theme dark|light   --select N   --palette   --notifications   --zoom   --menu   --colors   --size WxH
+///   --explorer           open the file explorer      --settings   open the settings dialog
 /// </summary>
 public sealed record LaunchOptions(
     string Scenario, int Panes, int CloseAfterMs, string? Theme, int Select,
-    bool Palette, bool Notifications, bool Zoom, bool Menu, bool Colors, int Width, int Height)
+    bool Palette, bool Notifications, bool Zoom, bool Menu, bool Colors, int Width, int Height,
+    bool Explorer = false, bool Settings = false)
 {
     public static LaunchOptions Parse(string[] args)
     {
@@ -25,7 +27,8 @@ public sealed record LaunchOptions(
             Value("--theme"),
             int.TryParse(Value("--select"), out var s) ? s : 0,
             Flag("--palette"), Flag("--notifications"), Flag("--zoom"), Flag("--menu"), Flag("--colors"),
-            int.Parse(size[0]), int.Parse(size[1]));
+            int.Parse(size[0]), int.Parse(size[1]),
+            Flag("--explorer"), Flag("--settings"));
     }
 
     public AppState BuildState() => Scenario switch

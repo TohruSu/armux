@@ -21,6 +21,9 @@ public sealed partial class CommandPalette : Grid
     List<Command> all = [], shown = [];
     int index;
 
+    /// <summary>Re-reads the interface font after a settings change.</summary>
+    public void UpdateFont() => input.FontFamily = new FontFamily(Theme.UiFont);
+
     public bool IsOpen => Visibility == Visibility.Visible;
 
     public CommandPalette()

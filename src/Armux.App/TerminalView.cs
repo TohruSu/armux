@@ -16,9 +16,9 @@ public sealed partial class TerminalView : Grid
         Children.Add(scroll);
         var text = new TextBlock
         {
-            FontFamily = new FontFamily(Theme.MonoFont),
-            FontSize = 13,
-            LineHeight = 18,
+            FontFamily = Theme.TerminalFont,
+            FontSize = Theme.TerminalFontSize,
+            LineHeight = Math.Round(Theme.TerminalFontSize * 1.4),
             TextWrapping = TextWrapping.Wrap,
             IsTextSelectionEnabled = true,
             Foreground = Theme.Term(TermColor.Default),

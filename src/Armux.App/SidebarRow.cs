@@ -71,26 +71,19 @@ public sealed partial class SidebarRow : Grid
 
     void Update()
     {
-        bool sel = ws.Selected;
-        card.Background = sel ? Theme.Brush("SelectedRow") : hover ? Theme.Brush("SidebarHover") : null;
+        card.Background = ws.Selected ? Theme.Brush("SelectedRow") : hover ? Theme.Brush("SidebarHover") : null;
         title.Text = ws.Title;
-        title.Foreground = Theme.Brush(sel ? "SelectedText" : "Text");
         status.Text = ws.Status;
         status.Visibility = string.IsNullOrEmpty(ws.Status) ? Visibility.Collapsed : Visibility.Visible;
-        status.Foreground = Theme.Brush(sel ? "SelectedDim" : "TextDim");
         location.Text = string.IsNullOrEmpty(ws.Ports) ? ws.Location : $"{ws.Location}  {ws.Ports}";
-        location.Foreground = Theme.Brush(sel ? "SelectedDim" : "TextFaint");
         pr.Text = ws.Pr;
         pr.Visibility = ws.HasPr ? Visibility.Visible : Visibility.Collapsed;
-        pr.Foreground = sel ? Theme.Brush("SelectedText") : Theme.Brush("Link");
         pin.Visibility = ws.Pinned ? Visibility.Visible : Visibility.Collapsed;
-        pin.Foreground = Theme.Brush(sel ? "SelectedDim" : "TextFaint");
 
         badge.Visibility = ws.HasUnread ? Visibility.Visible : Visibility.Collapsed;
         badgeText.Text = ws.UnreadCount.ToString();
-        // On the blue selected row the badge inverts, so it stays visible.
-        badge.Background = sel ? Theme.Brush("SelectedText") : Theme.Brush("Accent");
-        badgeText.Foreground = sel ? Theme.Brush("Accent") : Theme.Brush("SelectedText");
+        badge.Background = Theme.Brush("Accent");
+        badgeText.Foreground = Theme.Brush("SelectedText");
 
         var color = ws.Color is null ? null : Theme.Hex(ws.Color);
         rail.Fill = color;

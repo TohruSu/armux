@@ -13,14 +13,29 @@ public static class Theme
 {
     public static bool Dark { get; private set; } = true;
 
-    public const string UiFont = "Segoe UI Variable Text";
-    public const string MonoFont = "Cascadia Mono";
+    /// <summary>Saved fonts and sizes. Change them with <see cref="UseSettings"/>, then re-render.</summary>
+    public static Settings Settings { get; private set; } = new();
+
+    public static string UiFont => Settings.UiFont;
+    public static double TerminalFontSize => Settings.TerminalFontSize;
+
+    /// <summary>The bundled copy of Zed's default font, loaded from the app folder.</summary>
+    const string BundledLilex = "ms-appx:///Assets/Fonts/Lilex-VF.ttf#Lilex";
+
+    /// <summary>The terminal font with fallbacks, so a missing font or glyph still renders monospaced.</summary>
+    public static FontFamily TerminalFont => new(FontSource(Settings.TerminalFont) + ", Cascadia Mono, Consolas");
+
+    /// <summary>A family name, or the bundled file for Lilex.</summary>
+    public static string FontSource(string family) =>
+        family.Equals(Settings.DefaultTerminalFont, StringComparison.OrdinalIgnoreCase) ? BundledLilex : family;
+
+    public static void UseSettings(Settings s) => Settings = s.Normalized();
 
     static readonly Dictionary<string, (uint Dark, uint Light)> Tokens = new()
     {
         ["TitleBar"] = (0xFF1F1F1F, 0xFFF0F0F0),
         ["Sidebar"] = (0xFF1F1F1F, 0xFFF0F0F0),
-        ["SidebarHover"] = (0xFF2A2A2A, 0xFFE4E4E4),
+        ["SidebarHover"] = (0xFF292929, 0xFFE6E6E6),
         ["Pane"] = (0xFF262626, 0xFFFFFFFF),
         ["TabBar"] = (0xFF2C2C2C, 0xFFF5F5F5),
         ["TabActive"] = (0xFF262626, 0xFFFFFFFF),
@@ -30,7 +45,8 @@ public static class Theme
         ["TextDim"] = (0xFFA3A3A3, 0xFF5C5C5C),
         ["TextFaint"] = (0xFF7A7A7A, 0xFF8A8A8A),
         ["Accent"] = (0xFF3B82F6, 0xFF2563EB),
-        ["SelectedRow"] = (0xFF3B82F6, 0xFF2563EB),
+        // Selected workspace: a lighter gray than hover, not cmux's blue, so workspace colors stay visible (D-12).
+        ["SelectedRow"] = (0xFF363636, 0xFFD9D9D9),
         ["SelectedText"] = (0xFFFFFFFF, 0xFFFFFFFF),
         ["SelectedDim"] = (0xFFDBE7FE, 0xFFDBE7FE),
         ["Link"] = (0xFF60A5FA, 0xFF2563EB),

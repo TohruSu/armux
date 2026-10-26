@@ -18,6 +18,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsAotCompatible>true</IsAotCompatible>
+    <!-- FontList calls GDI through a function-pointer callback. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Release builds ship as NativeAOT: idle 95 MB working set vs 135 MB with the JIT, start-up 156 ms vs 320 ms
          (ARCHITECTURE.md section 7). AOT needs a self-contained publish; `dotnet build` stays framework-dependent. -->
     <PublishAot>true</PublishAot>
@@ -26,6 +28,10 @@
   <ItemGroup>
     <!-- Platform SDK, approved 2026-10-25 (Microsoft Software License Terms). See ARCHITECTURE.md section 10. -->
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Lilex, Zed's default font (SIL OFL-1.1, approved for fonts 2026-10-26). OFL.txt must ship with it. -->
+    <Content Include="Assets\Fonts\Lilex-VF.ttf;Assets\Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Armux.Core\Armux.Core.csproj" />

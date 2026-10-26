@@ -88,7 +88,14 @@ public sealed partial class PaneView : Grid
     {
         bool focused = host.IsFocused(Pane);
         tabs.Children.Clear();
-        foreach (var s in Pane.Surfaces) tabs.Children.Add(Tab(s, ReferenceEquals(s, Pane.Selected), focused));
+        foreach (var s in Pane.Surfaces)
+        {
+            bool active = ReferenceEquals(s, Pane.Selected);
+            var tab = Tab(s, active, focused);
+            tabs.Children.Add(tab);
+            // A new tab in a narrow pane can land past the edge of the tab strip; scroll it into view.
+            if (active) DispatcherQueue.TryEnqueue(() => tab.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false }));
+        }
 
         if (Pane.Selected is { } sel)
         {
@@ -112,7 +119,7 @@ public sealed partial class PaneView : Grid
         g.Background = active ? Theme.Brush("TabActive") : null;
         var fg = Theme.Brush(active ? "Text" : "TextDim");
 
-        var icon = Ui.Glyph(s.Kind == PanelKind.Browser ? Ui.Globe : Ui.Terminal, 11, fg);
+        var icon = Ui.Glyph(s.Kind switch { PanelKind.Browser => Ui.Globe, PanelKind.File => Ui.Document, _ => Ui.Terminal }, 11, fg);
         icon.VerticalAlignment = VerticalAlignment.Center;
         var title = Ui.Text(s.Title, 12.5, fg);
         title.VerticalAlignment = VerticalAlignment.Center;

@@ -12,6 +12,7 @@ public partial class App : Application
         Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER",
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "armux", "WebView2"));
         InitializeComponent();
+        Theme.UseSettings(Armux.Core.Settings.Load(MainWindow.SettingsPath));
         UnhandledException += (_, e) => Log("unhandled", e.Exception);
     }
 
