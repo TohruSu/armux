@@ -18,12 +18,12 @@ public static class MockData
     [
         L(("PowerShell 7.6.5", TermColor.Dim)),
         P(""),
-        L(("PS ", TermColor.Blue), ("C:\\src\\armux", TermColor.Cyan), ("> ", TermColor.Default)),
+        L(("PS ", TermColor.Blue), ("~\\dev\\armux", TermColor.Cyan), ("> ", TermColor.Default)),
     ];
 
     public static List<TermLine> AgentSession(string task) =>
     [
-        L(("PS ", TermColor.Blue), ("C:\\src\\armux", TermColor.Cyan), ("> ", TermColor.Default), ("claude", TermColor.Default)),
+        L(("PS ", TermColor.Blue), ("~\\dev\\armux", TermColor.Cyan), ("> ", TermColor.Default), ("claude", TermColor.Default)),
         P(""),
         L(("> ", TermColor.Dim), (task, TermColor.Default)),
         P(""),
@@ -44,7 +44,7 @@ public static class MockData
 
     public static List<TermLine> DevServer() =>
     [
-        L(("PS ", TermColor.Blue), ("C:\\src\\armux\\web", TermColor.Cyan), ("> ", TermColor.Default), ("npm run dev", TermColor.Default)),
+        L(("PS ", TermColor.Blue), ("~\\dev\\armux\\web", TermColor.Cyan), ("> ", TermColor.Default), ("npm run dev", TermColor.Default)),
         P(""),
         L(("> web@0.1.0 dev", TermColor.Dim)),
         L(("> vite --port 3000", TermColor.Dim)),
@@ -59,19 +59,19 @@ public static class MockData
 
     public static List<TermLine> Tests() =>
     [
-        L(("PS ", TermColor.Blue), ("C:\\src\\armux", TermColor.Cyan), ("> ", TermColor.Default), ("dotnet test", TermColor.Default)),
+        L(("PS ", TermColor.Blue), ("~\\dev\\armux", TermColor.Cyan), ("> ", TermColor.Default), ("dotnet test", TermColor.Default)),
         L(("  Determining projects to restore...", TermColor.Dim)),
         L(("  Armux.Core.Tests ", TermColor.Default), ("succeeded", TermColor.Green)),
         P(""),
         L(("Test summary: ", TermColor.Default), ("total: 24, failed: 0, succeeded: 24", TermColor.Green), (", skipped: 0, duration: 1.2s", TermColor.Dim)),
-        L(("PS ", TermColor.Blue), ("C:\\src\\armux", TermColor.Cyan), ("> ", TermColor.Default)),
+        L(("PS ", TermColor.Blue), ("~\\dev\\armux", TermColor.Cyan), ("> ", TermColor.Default)),
     ];
 
     /// <summary>One workspace with a single terminal pane. Used for the idle memory scenario.</summary>
     public static AppState Idle()
     {
         var state = new AppState();
-        var ws = NewWorkspace("pwsh", "", "main", "~\\src\\armux", MockData.Terminal("pwsh"));
+        var ws = NewWorkspace("pwsh", "", "main", "~\\dev\\armux", MockData.Terminal("pwsh"));
         state.Workspaces.Add(ws);
         state.Current = ws;
         return state;
@@ -109,7 +109,7 @@ public static class MockData
         var state = new AppState();
 
         var agent = Terminal("claude: split tree focus", AgentSession("Fix directional focus across nested splits"));
-        var main = NewWorkspace("split tree focus", "Agent turn complete", "main*", "~\\src\\armux", agent);
+        var main = NewWorkspace("split tree focus", "Agent turn complete", "main*", "~\\dev\\armux", agent);
         main.Color = "#3B82F6";
         main.Pinned = true;
         var mainPane = (Pane)main.Root;
@@ -121,22 +121,22 @@ public static class MockData
         state.Workspaces.Add(main);
 
         var review = Terminal("codex: review", AgentSession("Review the notification store for race conditions"));
-        var rev = NewWorkspace("notification review", "", "feat/notify", "~\\src\\armux", review);
+        var rev = NewWorkspace("notification review", "", "feat/notify", "~\\dev\\armux", review);
         rev.Color = "#22C55E";
         rev.Pr = "PR #12 · checks passing";
         var revRight = Layout.Split(rev, (Pane)rev.Root, SplitDirection.Right, Terminal("claude: tests", AgentSession("Add tests for MarkRead and LatestUnread")));
         rev.Focused = (Pane)((SplitNode)rev.Root).First;
         state.Workspaces.Add(rev);
 
-        var docs = NewWorkspace("arm64 setup docs", "Running", "docs/devices", "~\\src\\armux", Terminal("claude: docs", AgentSession("Document setup on Snapdragon X Elite")));
+        var docs = NewWorkspace("arm64 setup docs", "Running", "docs/devices", "~\\dev\\armux", Terminal("claude: docs", AgentSession("Document setup on Snapdragon X Elite")));
         docs.Color = "#F59E0B";
         state.Workspaces.Add(docs);
 
-        var ci = NewWorkspace("ci job summary", "", "ci/summary", "~\\src\\armux", Terminal("gh run watch", Tests()));
+        var ci = NewWorkspace("ci job summary", "", "ci/summary", "~\\dev\\armux", Terminal("gh run watch", Tests()));
         ci.Pr = "PR #14 · 1 check running";
         state.Workspaces.Add(ci);
 
-        var web = NewWorkspace("landing page", "Running", "main", "~\\src\\armux\\web", Terminal("npm run dev", DevServer()));
+        var web = NewWorkspace("landing page", "Running", "main", "~\\dev\\armux\\web", Terminal("npm run dev", DevServer()));
         web.Color = "#EC4899";
         web.Ports = ":3000 :5173";
         state.Workspaces.Add(web);

@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 
 namespace Armux.Core;
 
-public enum PanelKind { Terminal, Browser }
+public enum PanelKind { Terminal, Browser, File }
 
 /// <summary>Split direction. Right = side by side (cmux "split right"), Down = stacked ("split down").</summary>
 public enum SplitDirection { Right, Down }
@@ -11,7 +11,7 @@ public enum Direction { Left, Right, Up, Down }
 
 public enum IndicatorStyle { Accent, Underline, None }
 
-/// <summary>A tab inside a pane (cmux "surface"). Its content is a terminal or a browser panel.</summary>
+/// <summary>A tab inside a pane (cmux "surface"). Its content is a terminal, a browser or a read-only file view.</summary>
 public sealed class Surface : Observable
 {
     static int next;
@@ -26,6 +26,9 @@ public sealed class Surface : Observable
 
     string url = "";
     public string Url { get => url; set => Set(ref url, value); }
+
+    /// <summary>Full path of the file shown by a <see cref="PanelKind.File"/> surface.</summary>
+    public string FilePath { get; init; } = "";
 
     /// <summary>Mock terminal output for Phase 2. Replaced by a real terminal buffer in Phase 3.</summary>
     public List<TermLine> Lines { get; init; } = [];
