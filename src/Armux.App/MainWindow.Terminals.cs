@@ -3,6 +3,7 @@ using Armux.Core.Pty;
 using Armux.Core.Vt;
 using Layout = Armux.Core.Layout;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Armux.App;
 
@@ -259,5 +260,51 @@ public sealed partial class MainWindow
     {
         foreach (var s in sessions.Values) s.Dispose();
         sessions.Clear();
+    }
+
+    bool closeConfirmed, closeDialogOpen;
+
+    /// <summary>Programs the shells in this window have started and that are still running (claude, node, ...).</summary>
+    List<string> RunningPrograms()
+    {
+        var snapshot = ProcessTree.Snapshot();
+        return sessions.Values.Where(s => !s.Exited && s.ShellProcessId != 0)
+            .SelectMany(s => ProcessTree.ChildNames(snapshot, s.ShellProcessId))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>The close button, Alt+F4 or the taskbar: ask first when closing would end running programs (setting ConfirmClose).</summary>
+    async void OnWindowClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs e)
+    {
+        string mode = Theme.Settings.ConfirmClose;
+        if (closeConfirmed || mode == "never") return;
+        var running = RunningPrograms();
+        if (running.Count == 0 && mode != "always") return;
+        e.Cancel = true;
+        if (closeDialogOpen) return;
+
+        int shells = sessions.Values.Count(s => s.Live && !s.Exited);
+        string what = shells == 1 ? "1 terminal" : $"{shells} terminals";
+        var body = new StackPanel { Spacing = 12, MaxWidth = 380 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = running.Count > 0
+                ? $"{string.Join(", ", running.Take(6))}{(running.Count > 6 ? ", ..." : "")} {(running.Count == 1 ? "is" : "are")} still running. Closing armux ends {(running.Count == 1 ? "it" : "them")} and {what}."
+                : $"Closing armux ends {what}.",
+        });
+        var dontAsk = new CheckBox { Content = "Don't ask again" };
+        body.Children.Add(dontAsk);
+        var dlg = Dialog("Close armux?", body, "Close");
+        closeDialogOpen = true;
+        try
+        {
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
+        }
+        catch (Exception ex) { App.Log(nameof(OnWindowClosing), ex); return; }
+        finally { closeDialogOpen = false; }
+        if (dontAsk.IsChecked == true) ChangeSettings(x => x with { ConfirmClose = "never" });
+        closeConfirmed = true;
+        Close();
     }
 }

@@ -284,6 +284,9 @@ public sealed partial class MainWindow
                 i => ChangeSettings(x => x with { NewTabDirectory = i == 1 ? "start" : "workspace" }))));
         body.Children.Add(Card("When the last shell exits", "Typing exit in the only terminal left.",
             Choice(["Close the window", "Start a new shell"], s.CloseOnLastExit ? 0 : 1, i => ChangeSettings(x => x with { CloseOnLastExit = i == 0 }))));
+        body.Children.Add(Card("Ask before closing armux", "Closing the window ends every shell and the programs running in them.",
+            Choice(["When a program is running", "Always", "Never"], Array.IndexOf(Settings.ConfirmCloseModes, s.ConfirmClose),
+                i => ChangeSettings(x => x with { ConfirmClose = Settings.ConfirmCloseModes[i] }))));
 
         body.Children.Add(GroupHeader("Mouse"));
         body.Children.Add(Card("Copy on select", "Selecting text with the mouse copies it. Programs that use the mouse (Claude Code, vim) need Shift+drag to select.",

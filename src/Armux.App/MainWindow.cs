@@ -127,6 +127,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
             };
         pipe = new PipeServer(DispatcherQueue, HandleRequest);
         pipe.Start();
+        AppWindow.Closing += OnWindowClosing;
         Closed += (_, _) =>
         {
             pipe?.Dispose();
@@ -644,6 +645,14 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         if (opts.Explorer) ToggleExplorer();
         if (opts.PromptEditor) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, TogglePromptEditor);
         if (opts.Palette) OpenPalette();
+        if (opts.Rename && state.Workspaces.Count > 0)
+        {
+            var t = DispatcherQueue.CreateTimer();
+            t.Interval = TimeSpan.FromSeconds(3);
+            t.IsRepeating = false;
+            t.Tick += (_, _) => _ = RenameAsync(state.Workspaces[0]);
+            t.Start();
+        }
         if (opts.Settings) ShowSettingsPage(opts.SettingsSection ?? "General");
         if (opts.Notifications) bellFlyout.ShowAt(bellButton);
         if (opts.Menu && sidebarList.Children.Count > 1 && sidebarList.Children[1] is SidebarRow row)

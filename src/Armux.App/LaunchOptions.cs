@@ -11,11 +11,12 @@ namespace Armux.App;
 ///   --theme dark|light   --select N   --palette   --notifications   --zoom   --menu   --colors   --size WxH
 ///   --explorer           open the file explorer      --settings [section]   open Settings (General, Appearance, …)
 ///   --prompt-editor      open the prompt editor under the focused terminal
+///   --rename             open the rename dialog for the first workspace after 3 s (tests that Enter stays out of the terminal)
 /// </summary>
 public sealed record LaunchOptions(
     string Scenario, int Panes, int CloseAfterMs, string? Theme, int Select,
     bool Palette, bool Notifications, bool Zoom, bool Menu, bool Colors, int Width, int Height,
-    bool Explorer = false, bool Settings = false, bool PromptEditor = false, string? SettingsSection = null)
+    bool Explorer = false, bool Settings = false, bool PromptEditor = false, string? SettingsSection = null, bool Rename = false)
 {
     public static LaunchOptions Parse(string[] args)
     {
@@ -31,7 +32,8 @@ public sealed record LaunchOptions(
             Flag("--palette"), Flag("--notifications"), Flag("--zoom"), Flag("--menu"), Flag("--colors"),
             int.Parse(size[0]), int.Parse(size[1]),
             Flag("--explorer"), Flag("--settings"), Flag("--prompt-editor"),
-            Value("--settings") is { } section && !section.StartsWith("--") ? section : null);
+            Value("--settings") is { } section && !section.StartsWith("--") ? section : null,
+            Flag("--rename"));
     }
 
     public AppState BuildState() => Scenario switch

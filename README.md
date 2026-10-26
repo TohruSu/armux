@@ -34,7 +34,7 @@ A terminal workspace app for **Windows 11 on ARM64**, modeled on [cmux](https://
 | Taskbar status of the current workspace while you're tabbed out: accent bar while Claude Code (or any OSC 9;4 program) works, yellow when it needs you, red on error | Done |
 | Prompt editor (`Ctrl+G`): a normal text box under the terminal for writing long prompts, sent in one paste | Done |
 | Mouse: copy on select, Shift+drag selection in mouse-aware programs, wheel and clicks passed to programs like Claude Code and vim, drag files from the explorer or Windows Explorer to type their relative path | Done |
-| Settings page (`Ctrl+Shift+,` or the gear): theme (Match Windows, Dark, Light, High contrast), fonts, zoom, cursor, scrollback, start and new-tab directories, notifications, browser, every shortcut rebindable, and About with version details | Done |
+| Settings page (`Ctrl+Shift+,` or the gear): theme (Match Windows, Dark, Light, High contrast), fonts, zoom, cursor, scrollback, start and new-tab directories, a warning before closing while programs run, notifications, browser, every shortcut rebindable, and About with version details | Done |
 | WSL | Not planned for now: a WSL VM costs far more memory than armux |
 
 More screenshots: [browser and CLI](docs/screenshots/14-browser-and-cli.png), [command palette](docs/screenshots/02-command-palette.png), [notifications](docs/screenshots/03-notifications.png), [workspace colors](docs/screenshots/05-workspace-colors.png), [zoomed pane](docs/screenshots/06-zoomed-pane.png), [light theme](docs/screenshots/07-light-theme.png), [four-pane grid](docs/screenshots/08-four-pane-grid.png), [file explorer](docs/screenshots/11-file-explorer.png), [settings](docs/screenshots/12-settings.png).

@@ -147,7 +147,7 @@ public sealed partial class MainWindow
         Cmd("Theme: Light", "", () => ChangeSettings(s => s with { Theme = "light" }));
         Cmd("Theme: High Contrast", "", () => ChangeSettings(s => s with { Theme = "high-contrast" }));
         Cmd("Theme: Match Windows", "", () => ChangeSettings(s => s with { Theme = "system" }));
-        Cmd("New Window", "Ctrl+Alt+Shift+N", () => new MainWindow(opts with { Scenario = "idle", Palette = false, Notifications = false, Zoom = false, Menu = false, Colors = false, Explorer = false, Settings = false, PromptEditor = false, Select = 0 }).Activate());
+        Cmd("New Window", "Ctrl+Alt+Shift+N", () => new MainWindow(opts with { Scenario = "idle", Palette = false, Notifications = false, Zoom = false, Menu = false, Colors = false, Explorer = false, Settings = false, PromptEditor = false, Rename = false, Select = 0 }).Activate());
         Cmd("Command Palette", "Ctrl+Shift+P", OpenPalette);
 
         RebuildKeymap();

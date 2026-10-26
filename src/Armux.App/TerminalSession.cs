@@ -141,6 +141,9 @@ public sealed class TerminalSession : IDisposable
 
     public void Send(string text) => pty?.Write(text);
 
+    /// <summary>The shell's process id, or 0 before it starts.</summary>
+    public int ShellProcessId => pty?.ProcessId ?? 0;
+
     /// <summary>Pastes text the way Ctrl+Shift+V does: bracketed when the program asked for it.</summary>
     public void Paste(string text)
     {

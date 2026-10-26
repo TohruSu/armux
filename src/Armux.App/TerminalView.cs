@@ -86,7 +86,7 @@ public sealed partial class TerminalView : UserControl
         Loaded += (_, _) => { session.Changed -= OnChanged; session.Changed += OnChanged; Render(force: true); };
         Unloaded += (_, _) => { session.Changed -= OnChanged; blink.Stop(); };
         GotFocus += (_, _) => { hasFocus = true; if (session.Terminal.FocusReporting) session.Send("\u001b[I"); DrawCursor(); };
-        LostFocus += (_, _) => { hasFocus = false; if (session.Terminal.FocusReporting) session.Send("\u001b[O"); DrawCursor(); };
+        LostFocus += (_, _) => { hasFocus = false; keyDownSeen = false; if (session.Terminal.FocusReporting) session.Send("\u001b[O"); DrawCursor(); };
         CharacterReceived += OnCharacter;
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
@@ -527,7 +527,6 @@ public sealed partial class TerminalView : UserControl
 
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        keyDownSeen = true;
         bool shift = Down(VirtualKey.Shift), ctrl = Down(VirtualKey.Control), alt = Down(VirtualKey.Menu);
         if (e.Key == VirtualKey.Insert && shift && !ctrl) { _ = PasteAsync(); e.Handled = true; return; }
         TermKey? key = e.Key switch
@@ -539,7 +538,14 @@ public sealed partial class TerminalView : UserControl
             VirtualKey.Tab => TermKey.Tab, VirtualKey.Back => TermKey.Backspace,
             _ => null,
         };
-        if (key is null) { base.OnKeyDown(e); return; }
+        if (key is null)
+        {
+            // This key's character (if any) may follow; modifiers alone produce none.
+            keyDownSeen = e.Key is not (VirtualKey.Shift or VirtualKey.Control or VirtualKey.Menu or VirtualKey.LeftWindows or VirtualKey.RightWindows
+                or VirtualKey.LeftShift or VirtualKey.RightShift or VirtualKey.LeftControl or VirtualKey.RightControl or VirtualKey.LeftMenu or VirtualKey.RightMenu);
+            base.OnKeyDown(e);
+            return;
+        }
         e.Handled = true;
         SendInput(KeyEncoder.Encode(key.Value, shift, alt, ctrl, session.Terminal.AppCursorKeys));
     }
@@ -550,6 +556,7 @@ public sealed partial class TerminalView : UserControl
         e.Handled = true;
         // A control character whose key went down elsewhere (Enter in a closing dialog, Esc closing
         // the palette) arrives here after focus returns. Drop it so it doesn't reach the shell.
+        // LostFocus clears the flag, so a key pressed before a dialog opened can't vouch for it.
         bool seen = keyDownSeen;
         keyDownSeen = false;
         if (!seen && c < ' ') return;

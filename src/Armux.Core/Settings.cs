@@ -21,6 +21,7 @@ public sealed record Settings
     public static readonly string[] CursorStyles = ["block", "bar", "underline"];
     public static readonly string[] SearchEngines = ["bing", "google", "duckduckgo"];
     public static readonly string[] Indicators = ["accent", "underline", "none"];
+    public static readonly string[] ConfirmCloseModes = ["running", "always", "never"];
 
     // Settable, not init: the JSON source generator fills init-only properties missing from the file with
     // default values (0, null), which would turn a partial settings file into font size 0.
@@ -34,6 +35,8 @@ public sealed record Settings
     public string NewTabDirectory { get; set; } = "workspace";
     /// <summary>When the last terminal's shell exits, close the window (true) or open a new shell (false).</summary>
     public bool CloseOnLastExit { get; set; } = true;
+    /// <summary>Ask before closing the window: "running" (only while a terminal runs a program), "always" or "never".</summary>
+    public string ConfirmClose { get; set; } = "running";
     /// <summary>Selecting text with the mouse copies it (Warp, Windows Terminal's copyOnSelect).</summary>
     public bool CopyOnSelect { get; set; } = true;
 
@@ -83,6 +86,7 @@ public sealed record Settings
         StartDirectory = (StartDirectory ?? "").Trim().Trim('"'),
         NewTabDirectory = NewTabDirectory == "start" ? "start" : "workspace",
         Theme = OneOf(Theme, Themes),
+        ConfirmClose = OneOf(ConfirmClose, ConfirmCloseModes),
         CursorStyle = OneOf(CursorStyle, CursorStyles),
         SearchEngine = OneOf(SearchEngine, SearchEngines),
         WorkspaceIndicator = OneOf(WorkspaceIndicator, Indicators),

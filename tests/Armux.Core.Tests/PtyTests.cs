@@ -29,4 +29,20 @@ public sealed class PtyTests
         }
         StringAssert.Contains(text, "pty-ok from-armux");
     }
+
+    [TestMethod]
+    [Timeout(30_000, CooperativeCancellation = true)]
+    public void ProcessTreeFindsAShellsRunningProgram()
+    {
+        // The close warning lists what each shell has started; here the "shell" is cmd and the program is ping.
+        using var pty = PtySession.Start("cmd.exe /c ping -n 20 127.0.0.1", Path.GetTempPath(), new Dictionary<string, string>(), 80, 10, _ => { }, _ => { });
+        List<string> names = [];
+        for (int i = 0; i < 100 && !names.Contains("ping"); i++)
+        {
+            Thread.Sleep(50);
+            names = ProcessTree.ChildNames(ProcessTree.Snapshot(), pty.ProcessId).ToList();
+        }
+        CollectionAssert.Contains(names, "ping");
+        Assert.IsFalse(ProcessTree.ChildNames(ProcessTree.Snapshot(), int.MaxValue - 1).Any());
+    }
 }
