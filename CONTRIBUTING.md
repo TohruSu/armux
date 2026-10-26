@@ -7,7 +7,7 @@ Thanks for helping. armux is a Windows on ARM64 project. Most of this guide is a
 1. **No cmux code.** cmux is GPL-3.0-or-later and armux is MIT. Do not copy, paste or translate cmux source, assets or screenshots. Build from cmux's public docs and observed behavior. If you have read cmux's source for a feature, say so in the PR so a reviewer can check the result is an independent implementation.
 2. **Every UI element traces to a cmux feature.** Link the cmux README or docs section in your PR. Windows-specific differences go in [ARCHITECTURE.md, section 9](ARCHITECTURE.md#9-windows-deviations).
 3. **Memory is a feature.** UI or runtime changes include before and after numbers from `scripts/measure-memory.ps1`.
-4. **Dependencies are rare.** Only MIT, Apache-2.0, BSD, Unicode-3.0 or Zlib licenses, including transitive dependencies. Add each one to the [dependency register](ARCHITECTURE.md#10-dependency-register) with a reason. Prefer the base class library or a few lines of code over a package.
+4. **Dependencies are rare.** Only MIT, Apache-2.0, BSD, Unicode-3.0 or Zlib licenses, including transitive dependencies. Bundled fonts may also be SIL OFL-1.1, shipped with their `OFL.txt`. Add each one to the [dependency register](ARCHITECTURE.md#10-dependency-register) with a reason. Prefer the base class library or a few lines of code over a package.
 5. **ARM64 only.** No macOS, Linux or x64 targets.
 
 ## Setup
@@ -39,7 +39,9 @@ dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publis
 pwsh scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe
 ```
 
-Useful launch flags for UI work: `--scenario demo|idle|panes|browser`, `--panes N`, `--theme light`, `--palette`, `--notifications`, `--zoom`, `--select N` (see `src/Armux.App/LaunchOptions.cs`). `scripts/screenshot.ps1` captures the window, and `scripts/bench.ps1` measures start-up and memory.
+Useful launch flags for UI work: `--scenario demo|idle|panes|browser`, `--panes N`, `--theme light`, `--palette`, `--notifications`, `--zoom`, `--select N`, `--explorer`, `--settings` (see `src/Armux.App/LaunchOptions.cs`). Set `ARMUX_SETTINGS_FILE` to a scratch path so screenshots and measurements use default fonts, not your own settings. `scripts/screenshot.ps1` captures the window, and `scripts/bench.ps1` measures start-up and memory.
+
+`screenshot.ps1 -Keys` and `-Clicks` send real input. They check that armux is the foreground window before each key or click and stop otherwise, but run them only when you are not using the machine. For repeated actions, prefer UI Automation (icon buttons carry automation names), which sends no input to other windows.
 
 ### Common ARM64 traps
 

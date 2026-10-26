@@ -12,7 +12,7 @@ A terminal workspace app for **Windows 11 on ARM64**, modeled on [cmux](https://
 
 - **Native ARM64.** Built with WinUI 3 and published as NativeAOT for `win-arm64`. CI checks the release binary has PE machine type `0xAA64`, so it never runs under x64 emulation.
 - **cmux's UI and model.** The same Window > Workspace > Pane > Surface hierarchy, workspace colors, notification rings, command palette and a shortcut layout mapped to Windows. Every UI element traces to a cmux feature ([traceability table](ARCHITECTURE.md#5-feature-traceability)).
-- **Measured memory.** Idle on a Surface Laptop 7: about 95 MB working set, 47 MB private and 25 MB in Task Manager, starting in 156 ms. Numbers for every scenario, including the browser panel, are in [ARCHITECTURE.md](ARCHITECTURE.md#7-memory-budget), with the scripts to reproduce them.
+- **Measured memory.** Idle on a Surface Laptop 7: about 95 MB working set, 47 MB private and 25 MB in Task Manager, starting in 156–250 ms depending on machine state. Numbers for every scenario, including the browser panel, are in [ARCHITECTURE.md](ARCHITECTURE.md#7-memory-budget), with the scripts to reproduce them.
 
 ## Features
 
@@ -24,12 +24,15 @@ A terminal workspace app for **Windows 11 on ARM64**, modeled on [cmux](https://
 | Command palette (`Ctrl+Shift+P`) with inline shortcuts and workspace switching | Done |
 | Notification rings, tab dots, bell with unread count, notification panel, jump to latest unread | Done (simulated notifications) |
 | Built-in browser panel (WebView2): lazy, suspended when hidden, at most 2 live, fully released when closed | Done (mock page) |
+| File explorer beside the sidebar (`Ctrl+Shift+E`), modeled on Warp's file tree: open files as read-only tabs or panes, copy paths, new file, reveal in File Explorer | Done (hidden by default) |
+| Keyboard switching: `Ctrl+1`–`9` and `Ctrl+PageUp`/`PageDown` for workspaces, `F6` and `Ctrl+Alt+arrows` for panes | Done |
+| Terminal font: Lilex (Zed's default) bundled; any installed font and size in Settings (`Ctrl+Shift+,`) | Done |
 | Dark and light themes | Done |
 | PowerShell 7, cmd and WSL through ConPTY | Phase 3 |
 | OSC 9 / 99 / 777 notification detection, Windows toasts | Phase 3 |
 | `armux notify` CLI and named-pipe API | Phase 3 |
 
-More screenshots: [command palette](docs/screenshots/02-command-palette.png), [notifications](docs/screenshots/03-notifications.png), [workspace colors](docs/screenshots/05-workspace-colors.png), [zoomed pane](docs/screenshots/06-zoomed-pane.png), [light theme](docs/screenshots/07-light-theme.png), [four-pane grid](docs/screenshots/08-four-pane-grid.png).
+More screenshots: [command palette](docs/screenshots/02-command-palette.png), [notifications](docs/screenshots/03-notifications.png), [workspace colors](docs/screenshots/05-workspace-colors.png), [zoomed pane](docs/screenshots/06-zoomed-pane.png), [light theme](docs/screenshots/07-light-theme.png), [four-pane grid](docs/screenshots/08-four-pane-grid.png), [file explorer](docs/screenshots/11-file-explorer.png), [settings](docs/screenshots/12-settings.png).
 
 ## Requirements
 
@@ -67,4 +70,4 @@ Contributions are welcome, especially from people on Windows on ARM hardware. St
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The bundled [Lilex](https://github.com/mishamyrt/Lilex) font is under the SIL Open Font License 1.1 ([`OFL.txt`](src/Armux.App/Assets/Fonts/OFL.txt)).

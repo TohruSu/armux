@@ -1,6 +1,6 @@
 # armux architecture
 
-Status: **Phase 2 complete, awaiting maintainer review.** The cmux-style UI runs on mock data, built with WinUI 3 and published as NativeAOT. Measurements are in section 7. Sections marked _Phase 3_ are plans. Nothing in this file claims a measured number unless it gives the method and date.
+Status: **Phase 2 complete; review round 1 changes applied (2026-10-26), awaiting maintainer review.** The cmux-style UI runs on mock data, built with WinUI 3 and published as NativeAOT. Measurements are in section 7. Sections marked _Phase 3_ are plans. Nothing in this file claims a measured number unless it gives the method and date.
 
 ## 1. Scope
 
@@ -72,7 +72,7 @@ Every UI element traces to a cmux feature. Windows deviations link to section 9.
 | cmux feature (source) | armux element | Phase 2 status | Screenshot | Deviation |
 |---|---|---|---|---|
 | Vertical sidebar of workspaces: title, latest notification text, branch, directory, ports, PR (README) | `SidebarRow` | Done (mock data) | 01 | — |
-| Unread badge on the workspace row, row lights up when an agent needs attention (README) | Badge on the row; inverted on the selected row | Done | 01, 09 | — |
+| Unread badge on the workspace row, row lights up when an agent needs attention (README) | Badge on the row | Done | 01, 09 | D-12 |
 | Tab colors: right-click a workspace, 17 presets or custom; color on the tab and the indicator rail (changelog 0.61.0) | Context menu, swatch flyout, `ColorPicker` for custom | Done | 04, 05 | D-10 |
 | Workspace indicator style Accent / Underline / None (cmux settings) | Left rail (default) or underline; palette commands switch it | Done | 01 | — |
 | Pin a workspace to the top (changelog 0.61.0) | Pin from the context menu, pin glyph on the row | Done | 01 | — |
@@ -84,19 +84,21 @@ Every UI element traces to a cmux feature. Windows deviations link to section 9.
 | Notification panel `⌘I`, jump to latest unread `⌘⇧U`, toggle unread, mark all read, clear (README) | Bell flyout with count, palette commands | Done | 03 | D-04 |
 | Flash focused panel `⌘⇧H` (README) | Ring pulse animation | Done | — | — |
 | Theme follows system / light / dark (cmux settings) | Dark and light token sets, "Match Windows" command | Done | 07 | D-07 |
-| Clear scrollback, font size | Clear scrollback (mock) | Partial: font size in Phase 3 | — | — |
+| Clear scrollback, font size | Clear scrollback (mock); font size commands | Done | — | — |
+| Settings window `⌘,` (cmux settings) | Settings dialog: terminal font and size, interface font | Done (fonts only) | 12 | D-15, D-16 |
+| _Not in cmux:_ Warp's file tree (docs.warp.dev, "File Tree") | `ExplorerPanel` beside the sidebar, read-only `FileView` tabs | Done | 11 | D-13, D-17 |
 | Desktop notification when a process needs attention (README) | Windows toast | Phase 3 | — | D-04 |
 | OSC 9, OSC 99, OSC 777 detection (README) | OSC parser in the terminal pipeline | Phase 3 (Phase 2 has "Simulate Agent Notification") | — | — |
 | `cmux notify` CLI, socket API (README) | `armux notify`, named-pipe API | Phase 3 | — | D-06 |
-| Find, find in directory, settings window, session restore | — | Phase 3 or later | — | — |
+| Find, find in directory, session restore | — | Phase 3 or later | — | — |
 | SSH workspaces, Cloud workspaces, Claude Code Teams, browser import | — | Not planned | — | — |
 
 ### Comparison with cmux screenshots
 
 Compared by eye against cmux's README images `main-first-image.png`, `vertical-horizontal-tabs-and-splits.png`, `notification-rings.png`, `sidebar-notification-badge.png` and `built-in-browser.png`.
 
-- **Matches:** title row with sidebar toggle, bell with count and `+`, then folder icon and workspace title. Selected workspace as a filled blue rounded block with white text. Badge, title, notification text and `branch · directory` lines. Per-pane tab bars with the four action buttons. Blue ring on panes needing attention. Browser panel with back, forward, reload and an address bar. Thin dividers between panes.
-- **Differs, by request:** Windows caption buttons on the right instead of macOS traffic lights (D-08). Segoe UI Variable instead of SF Pro (D-09).
+- **Matches:** title row with sidebar toggle, bell with count and `+`, then folder icon and workspace title. Selected workspace as a filled rounded block (gray in armux, D-12). Badge, title, notification text and `branch · directory` lines. Per-pane tab bars with the four action buttons. Blue ring on panes needing attention. Browser panel with back, forward, reload and an address bar. Thin dividers between panes.
+- **Differs, by request:** Windows caption buttons on the right instead of macOS traffic lights (D-08). Segoe UI Variable instead of SF Pro, Lilex for terminals (D-09, D-15). Gray selected workspace (D-12). File explorer button and column (D-13).
 - **Differs, not yet built:** cmux's terminal content is a real Ghostty terminal; armux shows static mock text until Phase 3. cmux's address bar row has extra browser tool icons, which armux omits.
 
 ## 6. Stack
@@ -197,6 +199,30 @@ Same device as section 6. Window 1440×900 physical pixels at 150% scale. Settle
 
 The same scenarios with the JIT build (`dotnet build`) measured idle 134.9 / 56.6 / 34.5 and start 320 ms. Browser-closed retained 122.7 MB private there. The managed heap was 0.8 MB, so that memory was .NET runtime and native commit. Shipping AOT avoids it.
 
+### Review round 1 results (2026-10-26, same build settings)
+
+Measured after the round 1 changes (gray selection, Lilex, settings, file explorer). App-attributable, MB. Explorer runs show this repository.
+
+| Scenario | Working set | Private | Task Manager | Note |
+|---|---|---|---|---|
+| Idle (3 runs) | 94.2–95.7 | 46.1–46.4 | 24.7–25.6 | Same as Phase 2. Lilex instead of Cascadia Mono: +1.3 private. |
+| 8 panes | 110.5 | 61.4 | 40.6 | — |
+| Explorer open (3 runs) | 100.8–105.5 | 52.3–57.2 | 30.4–35.5 | About +6 private over idle |
+| Explorer closed after one open (3 runs) | 100.6–104.2 | 51.6–56.2 | 30.4–33.5 | One-time cost stays (see below) |
+| Explorer opened and closed 1, 5, 20, 40, 80 times | 108.1–108.5 | 54.9–56.3 | 33.6–34.3 | Flat: no growth per cycle |
+| Browser open / closed | 411.3 / 11.7 | 168.8 / 49.4 | 93.0 / 4.6 | Same as Phase 2 |
+| Demo with explorer open | 428.9 | 183.3 | 109.0 | — |
+| Cold start, idle, median of 10 | 232–248 ms | | | The Phase 2 commit measured 231 ms in the same session, so the change from 156 ms is machine state, not code. |
+
+Explorer findings:
+
+- The first version created the panel on open and dropped it on close. It grew **1.9 MB private per open/close cycle** (127 MB after 40 cycles). The released rows' native XAML objects are freed only when their managed wrappers are collected, and an idle app rarely collects. Collecting on close cut the growth to 0.3 MB per cycle.
+- The shipped version keeps one panel, drops its rows, listings and file watchers when hidden, and collects once on close. 80 cycles stay flat at 55–56 MB private.
+- About 7 MB private stays after the first open (XAML templates, the icon font, text caches). The idle target (≤ 60 MB private) still holds.
+- Trimming the working set on close was tried and rejected. It lowered the working-set and Task Manager numbers but not private bytes, so it only made the numbers look better.
+
+The open/close cycles were driven through UI Automation (`InvokePattern` on the explorer button), which sends no input to other windows.
+
 Not yet measured: the per-pane cost of a real terminal (ConPTY host + shell + renderer). That comes in Phase 3, and the per-pane target applies again then.
 
 ### Browser panel policy (implemented in `BrowserHost`)
@@ -217,13 +243,13 @@ cmux binds ⌘, which Windows doesn't have. Plain Ctrl+letter can't be used, bec
 - ⌥⌘ to **Ctrl+Alt**
 - ⌃⌘ to **Alt+Shift**
 
-Exceptions are marked with *. Verified by injected key presses (`scripts/screenshot.ps1 -Keys`, screenshot 10): Ctrl+Shift+D, Ctrl+Alt+Shift+D, Ctrl+Shift+T, Ctrl+Shift+N, Ctrl+Shift+1, Ctrl+Shift+P. The other bindings are registered but not yet tested by injection.
+Exceptions are marked with *. Verified by injected key presses (`scripts/screenshot.ps1 -Keys`, screenshot 10, and review round 1): Ctrl+Shift+D, Ctrl+Alt+Shift+D, Ctrl+Shift+T, Ctrl+Shift+N, Ctrl+Shift+1, Ctrl+Shift+P, Ctrl+2, Ctrl+PageDown, Ctrl+Shift+E, Ctrl+Shift+= (one press). The other bindings are registered but not yet tested by injection.
 
 | Action | cmux | armux |
 |---|---|---|
 | New workspace | ⌘N | Ctrl+Shift+N |
-| Jump to workspace 1 to 8 / last | ⌘1–8 / ⌘9 | Ctrl+Shift+1–8 / Ctrl+Shift+9 |
-| Next / previous workspace | ⌃⌘] / ⌃⌘[ | Alt+Shift+] / Alt+Shift+[ |
+| Jump to workspace 1 to 8 / last | ⌘1–8 / ⌘9 | Ctrl+1–8 / Ctrl+9 * (D-14), also Ctrl+Shift+1–8 / Ctrl+Shift+9 |
+| Next / previous workspace | ⌃⌘] / ⌃⌘[ | Ctrl+PageDown / Ctrl+PageUp * (D-14), also Alt+Shift+] / Alt+Shift+[ |
 | Close workspace | ⌘⇧W | Ctrl+Alt+Shift+W |
 | Rename workspace | ⌘⇧R | Ctrl+Alt+Shift+R |
 | Toggle sidebar | ⌘B | Ctrl+Shift+B |
@@ -233,6 +259,8 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | Jump to surface 1 to 8 / last | ⌃1–8 / ⌃9 | Alt+1–8 / Alt+9 * (Ctrl+digit sends legacy control codes) |
 | Split right / down | ⌘D / ⌘⇧D | Ctrl+Shift+D / Ctrl+Alt+Shift+D |
 | Focus pane | ⌥⌘ arrows | Ctrl+Alt+arrows |
+| Focus next / previous pane | — | F6 / Shift+F6 * (D-14) |
+| File explorer | — (Warp: left panel ⌘\) | Ctrl+Shift+E * (D-13) |
 | Resize pane | ⌃⇧ H J K L | Alt+Shift+arrows * (Ctrl+Shift+K/L are taken by ⌘K/⌘L) |
 | Toggle pane zoom | ⌘⇧↩ | Ctrl+Alt+Shift+Enter |
 | Equalize splits | ⌃⌘⇧= | Ctrl+Alt+= * |
@@ -246,7 +274,9 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | Toggle unread | ⌥⌘U | Ctrl+Alt+U |
 | Clear scrollback | ⌘K | Ctrl+Shift+K |
 | New window | ⌘⇧N | Ctrl+Alt+Shift+N |
-| Find, copy/paste, font size, settings | ⌘F, ⌘C/⌘V, ⌘+/⌘-, ⌘, | Phase 3 |
+| Font size bigger / smaller / reset | ⌘+ / ⌘- / ⌘0 | Ctrl+Shift+= / Ctrl+Shift+- / Ctrl+Shift+0 |
+| Settings | ⌘, | Ctrl+Shift+, |
+| Find, copy/paste | ⌘F, ⌘C/⌘V | Phase 3 |
 | Quit | ⌘Q | Alt+F4 |
 
 ## 9. Windows deviations
@@ -261,19 +291,26 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | D-06 | Unix socket API | Named pipe `\\.\pipe\armux-<user>` (Phase 3) | Windows-native IPC. |
 | D-07 | Reads Ghostty config for themes | Own dark and light tokens (`Theme.cs`) | Ghostty has no Windows build. |
 | D-08 | macOS traffic-light window buttons on the left | Windows caption buttons on the right | Maintainer request: macOS-only chrome is replaced by Windows chrome. |
-| D-09 | SF Pro | Segoe UI Variable (Windows 11 system font), Cascadia Mono for terminals | Maintainer request; SF Pro is not licensed for Windows apps. |
+| D-09 | SF Pro | Segoe UI Variable (Windows 11 system font) for the interface | Maintainer request; SF Pro is not licensed for Windows apps. Terminal font: D-15. |
 | D-10 | Color presets in the right-click menu | Right-click menu opens a 17-swatch flyout | A swatch grid is quicker to scan than 17 text items in a Windows menu. |
 | D-11 | App and CLI both named `cmux` | App `ArmuxApp.exe`; `armux.exe` is reserved for the CLI | Windows file names are case-insensitive, so the app and CLI need different names in one folder. |
+| D-12 | Selected workspace is a blue block with white text | Gray block (lighter than hover) with normal text colors; the unread badge stays blue | Maintainer request (2026-10-26): on blue, the workspace color rail was hard to see. |
+| D-13 | No file explorer | Warp-style file tree, hidden by default. A title-bar button left of the bell, or Ctrl+Shift+E, opens it as a column beside the sidebar, never in place of it. It shows the current workspace's directory; a missing directory falls back to its nearest existing parent. Click opens a file. Context menu: open in new tab, open in new pane, copy path, copy relative path, new file (folders), reveal in File Explorer, open with default app. Icons for common file types; the folders on screen are watched for changes. | Maintainer request (2026-10-26). Warp's "Attach as context" becomes "Insert path in terminal", shown disabled until Phase 3 has real terminals. |
+| D-14 | ⌘1–9 and ⌃⌘] / ⌃⌘[ switch workspaces | Ctrl+1–9 and Ctrl+PageDown / Ctrl+PageUp added; F6 / Shift+F6 cycle panes | Maintainer request (2026-10-26). Ctrl+Shift+Tab stays "previous tab", its standard meaning. Ctrl+digit no longer reaches the shell (Ctrl+2 to Ctrl+7 send rarely used legacy control codes). |
+| D-15 | Terminal font from the Ghostty config | Lilex, Zed's default font since 2025, is bundled and the default; any installed font can be chosen | Maintainer request (2026-10-26). |
+| D-16 | Native macOS settings window | `ContentDialog` with terminal font, size (− / + stepper) and interface font, saved to `%LOCALAPPDATA%\armux\settings.json` (`ARMUX_SETTINGS_FILE` overrides the path) | WinUI's `NumberBox` crashes NativeAOT builds (missing `TabViewScrollButtonBackground` resource), so the size uses buttons. |
+| D-17 | Warp opens files in its code editor | Read-only `FileView` tab in the terminal font: first 256 KB; binary files get an "Open with default app" button | armux has no editor; building one is out of scope. |
 
 ## 10. Dependency register
 
-Allowed licenses, direct and transitive: MIT, Apache-2.0, BSD (any clause count), Unicode-3.0 and Zlib. The Windows App SDK is approved as a platform SDK (2026-10-25, when the maintainer chose WinUI). Anything else stops for maintainer review.
+Allowed licenses, direct and transitive: MIT, Apache-2.0, BSD (any clause count), Unicode-3.0 and Zlib. The Windows App SDK is approved as a platform SDK (2026-10-25, when the maintainer chose WinUI). SIL OFL-1.1 is approved **for bundled fonts only** (2026-10-26, Lilex). Anything else stops for maintainer review.
 
 | Dependency | Where | License | Why |
 |---|---|---|---|
 | Microsoft.WindowsAppSDK 1.8.260921001 | App | Microsoft Software License Terms (approved platform SDK) | WinUI 3, windowing, title bar |
 | Microsoft.Web.WebView2 (transitive) | App | BSD-3-Clause | Browser panel |
 | Microsoft.Windows.SDK.BuildTools (transitive) | Build only | Microsoft Software License Terms | WinRT projections at build time |
+| Lilex 2.630 (`Lilex[wght].ttf`, shipped as `Assets/Fonts/Lilex-VF.ttf`) | App | SIL OFL-1.1 (approved for fonts); `OFL.txt` ships beside it | Default terminal font |
 | MSTest.Sdk 4.0.2 | Tests only | MIT | Unit tests |
 | `actions/checkout@v7`, `actions/cache@v6`, `actions/upload-artifact@v7`, `actions/setup-dotnet@v6` | CI | MIT | Check out, cache NuGet, install .NET, publish the build |
 
