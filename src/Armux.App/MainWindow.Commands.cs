@@ -10,31 +10,52 @@ namespace Armux.App;
 
 public sealed partial class MainWindow
 {
-    readonly List<Command> commands = [];
+    /// <summary>A palette command: its group in Settings > Keyboard, and what it runs.</summary>
+    sealed record CommandEntry(string Id, string Group, Action Run);
+
+    readonly List<CommandEntry> entries = [];
+    readonly List<(string Chord, string Description, Action Run)> fixedKeys = [];
+    List<Command> commands = [];
     readonly Dictionary<Chord, Action> keymap = [];
+    Keymap keys = new(new Dictionary<string, string>());
+    string group = "";
     int simulated;
 
-    /// <summary>Adds a palette command and binds its shortcut. Shortcuts follow ARCHITECTURE.md section 8.</summary>
+    /// <summary>Adds a palette command with its default shortcut (ARCHITECTURE.md section 8); Settings can rebind it.</summary>
     void Cmd(string title, string shortcut, Action run)
     {
-        commands.Add(new Command(title, title, shortcut, run));
-        if (shortcut.Length > 0) keymap[Chord.Parse(shortcut)] = run;
+        entries.Add(new CommandEntry(title, group, run));
+        keys.AddDefault(title, Keymap.Normalize(shortcut));
     }
 
-    /// <summary>Binds a shortcut without a palette entry (numbered jumps).</summary>
-    void Key(string shortcut, Action run) => keymap[Chord.Parse(shortcut)] = run;
+    /// <summary>A fixed shortcut without a palette entry (numbered jumps, aliases); Settings lists it read-only.</summary>
+    void Key(string shortcut, Action run, string description = "") => fixedKeys.Add((Keymap.Normalize(shortcut), description, run));
+
+    /// <summary>Applies <see cref="Settings.Keybindings"/>: rebuilds the chord table and the palette's shortcut column.</summary>
+    void RebuildKeymap()
+    {
+        var fresh = new Keymap(Theme.Settings.Keybindings);
+        foreach (var e in entries) fresh.AddDefault(e.Id, keys.Default(e.Id));
+        keys = fresh;
+        keymap.Clear();
+        foreach (var (chord, _, run) in fixedKeys) keymap[Chord.Parse(chord)] = run;
+        // Rebindable commands win over fixed keys on the same chord.
+        foreach (var e in entries)
+            if (keys.Effective(e.Id) is { Length: > 0 } c) keymap[Chord.Parse(c)] = e.Run;
+        commands = [.. entries.Select(e => new Command(e.Id, e.Id, Chord.Display(keys.Effective(e.Id)), e.Run))];
+    }
 
     Workspace? Ws => state.Current;
     Pane? Focused => state.Current?.Focused;
 
     void RegisterCommands()
     {
-        // Workspaces
+        group = "Workspaces";
         Cmd("New Workspace", "Ctrl+Shift+N", NewWorkspace);
         Cmd("Next Workspace", "Ctrl+PageDown", () => CycleWorkspace(1));
         Cmd("Previous Workspace", "Ctrl+PageUp", () => CycleWorkspace(-1));
-        Key("Alt+Shift+]", () => CycleWorkspace(1));
-        Key("Alt+Shift+[", () => CycleWorkspace(-1));
+        Key("Alt+Shift+]", () => CycleWorkspace(1), "Next workspace (cmux mapping)");
+        Key("Alt+Shift+[", () => CycleWorkspace(-1), "Previous workspace (cmux mapping)");
         Cmd("Close Workspace", "Ctrl+Alt+Shift+W", () => { if (Ws is { } w) CloseWorkspace(w); });
         Cmd("Rename Workspace…", "Ctrl+Alt+Shift+R", () => { if (Ws is { } w) _ = RenameAsync(w); });
         Cmd("Pin or Unpin Workspace", "", () => { if (Ws is { } w) { w.Pinned = !w.Pinned; state.SortPinned(); } });
@@ -42,19 +63,20 @@ public sealed partial class MainWindow
         Cmd("Workspace Color: None", "", () => { if (Ws is { } w) w.Color = null; });
         foreach (var (name, hex) in WorkspaceColors.Presets)
             Cmd($"Workspace Color: {name}", "", () => { if (Ws is { } w) w.Color = hex; });
-        Cmd("Workspace Indicator: Accent (left rail)", "", () => state.Indicator = IndicatorStyle.Accent);
-        Cmd("Workspace Indicator: Underline", "", () => state.Indicator = IndicatorStyle.Underline);
-        Cmd("Workspace Indicator: None", "", () => state.Indicator = IndicatorStyle.None);
+        Cmd("Workspace Indicator: Accent (left rail)", "", () => ChangeSettings(s => s with { WorkspaceIndicator = "accent" }));
+        Cmd("Workspace Indicator: Underline", "", () => ChangeSettings(s => s with { WorkspaceIndicator = "underline" }));
+        Cmd("Workspace Indicator: None", "", () => ChangeSettings(s => s with { WorkspaceIndicator = "none" }));
+        group = "Window";
         Cmd("Toggle Sidebar", "Ctrl+Shift+B", ToggleSidebar);
         Cmd("Toggle File Explorer", "Ctrl+Shift+E", ToggleExplorer);
         // Ctrl+1-9 (requested in review, D-14) and cmux's mapped Ctrl+Shift+1-9 both jump to a workspace.
         foreach (var mods in new[] { "Ctrl", "Ctrl+Shift" })
         {
-            for (int i = 1; i <= 8; i++) { int n = i; Key($"{mods}+{n}", () => JumpWorkspace(n - 1)); }
-            Key($"{mods}+9", () => JumpWorkspace(state.Workspaces.Count - 1));
+            for (int i = 1; i <= 8; i++) { int n = i; Key($"{mods}+{n}", () => JumpWorkspace(n - 1), $"Go to workspace {n}"); }
+            Key($"{mods}+9", () => JumpWorkspace(state.Workspaces.Count - 1), "Go to the last workspace");
         }
 
-        // Surfaces
+        group = "Tabs";
         Cmd("New Terminal Tab", "Ctrl+Shift+T", () => { if (Focused is { } p) NewSurface(p, PanelKind.Terminal); });
         Cmd("New Browser Tab", "", () => { if (Focused is { } p) NewSurface(p, PanelKind.Browser); });
         Cmd("New PowerShell Tab", "", () => { if (Focused is { } p) { var s = LiveTerminal("pwsh"); p.Surfaces.Add(s); SelectSurface(p, s); } });
@@ -62,10 +84,10 @@ public sealed partial class MainWindow
         Cmd("Close Tab", "Ctrl+Shift+W", () => { if (Focused is { Selected: { } s } p) CloseSurface(p, s); });
         Cmd("Next Tab", "Ctrl+Tab", () => CycleSurface(1));
         Cmd("Previous Tab", "Ctrl+Shift+Tab", () => CycleSurface(-1));
-        for (int i = 1; i <= 8; i++) { int n = i; Key($"Alt+{n}", () => JumpSurface(n - 1)); }
-        Key("Alt+9", () => JumpSurface(int.MaxValue));
+        for (int i = 1; i <= 8; i++) { int n = i; Key($"Alt+{n}", () => JumpSurface(n - 1), $"Go to tab {n} in the pane"); }
+        Key("Alt+9", () => JumpSurface(int.MaxValue), "Go to the last tab in the pane");
 
-        // Splits
+        group = "Panes";
         Cmd("Split Right", "Ctrl+Shift+D", () => { if (Focused is { } p) SplitPane(p, SplitDirection.Right); });
         Cmd("Split Down", "Ctrl+Alt+Shift+D", () => { if (Focused is { } p) SplitPane(p, SplitDirection.Down); });
         Cmd("Focus Next Pane", "F6", () => CyclePane(1));
@@ -84,11 +106,11 @@ public sealed partial class MainWindow
         Cmd("Open Browser in Split", "Ctrl+Alt+Shift+L", () =>
         {
             if (Ws is not { } w || Focused is not { } p) return;
-            Layout.Split(w, p, SplitDirection.Right, new Surface { Kind = PanelKind.Browser, Title = "New tab" });
+            Layout.Split(w, p, SplitDirection.Right, NewBrowserSurface());
             RenderContent();
         });
 
-        // Notifications
+        group = "Notifications";
         Cmd("Show Notifications", "Ctrl+Shift+I", () => bellFlyout.ShowAt(bellButton));
         Cmd("Jump to Latest Unread", "Ctrl+Alt+Shift+U", () => { if (state.LatestUnread() is { } n) JumpTo(n); });
         Cmd("Toggle Unread", "Ctrl+Alt+U", () => { if (Ws is { } w && Focused?.Selected is { } s) state.ToggleUnread(w, s); });
@@ -96,7 +118,7 @@ public sealed partial class MainWindow
         Cmd("Clear All Notifications", "", state.Clear);
         Cmd("Simulate Agent Notification (mock)", "", SimulateNotification);
 
-        // Terminal and window
+        group = "Terminal";
         Cmd("Clear Scrollback", "Ctrl+Shift+K", () =>
         {
             if (Focused?.Selected is not { Kind: PanelKind.Terminal } s) return;
@@ -110,22 +132,25 @@ public sealed partial class MainWindow
         });
         Cmd("Copy", "Ctrl+Shift+C", () => FocusedTerminal()?.Copy());
         Cmd("Paste", "Ctrl+Shift+V", () => { if (FocusedTerminal() is { } t) _ = t.PasteAsync(); });
-        Cmd("Settings…", "Ctrl+Shift+,", () => _ = OpenSettingsAsync());
-        // Ctrl+= / Ctrl+- / Ctrl+0 zoom the whole window, as in browsers (requested). Terminal text alone: Ctrl+Shift.
-        Cmd("Zoom In", "Ctrl+=", () => ChangeZoom(1));
-        Cmd("Zoom Out", "Ctrl+-", () => ChangeZoom(-1));
-        Cmd("Reset Zoom", "Ctrl+0", () => ChangeZoom(0));
         Cmd("Increase Terminal Font Size", "Ctrl+Shift+=", () => ChangeFontSize(1));
         Cmd("Decrease Terminal Font Size", "Ctrl+Shift+-", () => ChangeFontSize(-1));
         Cmd("Reset Terminal Font Size", "Ctrl+Shift+0", () => ChangeFontSize(0));
         Cmd("Prompt Editor", "Ctrl+G", TogglePromptEditor);
-        Cmd("Theme: Dark", "", () => SetTheme(true));
-        Cmd("Theme: Light", "", () => SetTheme(false));
-        Cmd("Theme: Match Windows", "", () => SetTheme(new Windows.UI.ViewManagement.UISettings()
-            .GetColorValue(Windows.UI.ViewManagement.UIColorType.Background).R < 128));
+
+        group = "Window";
+        Cmd("Settings", "Ctrl+Shift+,", ToggleSettingsPage);
+        // Ctrl+= / Ctrl+- / Ctrl+0 zoom the whole window, as in browsers (requested). Terminal text alone: Ctrl+Shift.
+        Cmd("Zoom In", "Ctrl+=", () => ChangeZoom(1));
+        Cmd("Zoom Out", "Ctrl+-", () => ChangeZoom(-1));
+        Cmd("Reset Zoom", "Ctrl+0", () => ChangeZoom(0));
+        Cmd("Theme: Dark", "", () => ChangeSettings(s => s with { Theme = "dark" }));
+        Cmd("Theme: Light", "", () => ChangeSettings(s => s with { Theme = "light" }));
+        Cmd("Theme: High Contrast", "", () => ChangeSettings(s => s with { Theme = "high-contrast" }));
+        Cmd("Theme: Match Windows", "", () => ChangeSettings(s => s with { Theme = "system" }));
         Cmd("New Window", "Ctrl+Alt+Shift+N", () => new MainWindow(opts with { Scenario = "idle", Palette = false, Notifications = false, Zoom = false, Menu = false, Colors = false, Explorer = false, Settings = false, PromptEditor = false, Select = 0 }).Activate());
         Cmd("Command Palette", "Ctrl+Shift+P", OpenPalette);
 
+        RebuildKeymap();
         root.PreviewKeyDown += OnKey;
     }
 
@@ -136,16 +161,18 @@ public sealed partial class MainWindow
         for (int i = 0; i < state.Workspaces.Count; i++)
         {
             var w = state.Workspaces[i];
-            list.Add(new Command($"ws:{w.Id}", $"Go to Workspace: {w.Title}", i < 8 ? $"Ctrl+{i + 1}" : "", () => SelectWorkspace(w)));
+            list.Add(new Command($"ws:{w.Id}", $"Go to Workspace: {w.Title}", i < 8 ? $"Ctrl+{i + 1}" : i == 8 ? "Ctrl+9" : "", () => SelectWorkspace(w)));
         }
         palette.Open(list);
     }
 
     static bool Down(VirtualKey k) => InputKeyboardSource.GetKeyStateForCurrentThread(k).HasFlag(CoreVirtualKeyStates.Down);
 
-    static string? KeyName(VirtualKey k) => k switch
+    /// <summary>The chord key name for a virtual key, or null for keys that cannot be part of a shortcut.</summary>
+    internal static string? KeyName(VirtualKey k) => k switch
     {
         >= VirtualKey.A and <= VirtualKey.Z => k.ToString(),
+        >= VirtualKey.F1 and <= VirtualKey.F12 => "F" + (k - VirtualKey.F1 + 1),
         >= VirtualKey.Number0 and <= VirtualKey.Number9 => ((int)k - (int)VirtualKey.Number0).ToString(),
         (VirtualKey)187 or VirtualKey.Add => "=",
         (VirtualKey)189 or VirtualKey.Subtract => "-",
@@ -153,6 +180,17 @@ public sealed partial class MainWindow
         (VirtualKey)219 => "[",
         (VirtualKey)221 => "]",
         (VirtualKey)188 => ",",
+        (VirtualKey)190 => ".",
+        (VirtualKey)191 => "/",
+        (VirtualKey)186 => ";",
+        (VirtualKey)222 => "'",
+        (VirtualKey)192 => "`",
+        (VirtualKey)220 => "\\",
+        VirtualKey.Space => "SPACE",
+        VirtualKey.Home => "HOME",
+        VirtualKey.End => "END",
+        VirtualKey.Insert => "INSERT",
+        VirtualKey.Delete => "DELETE",
         VirtualKey.Enter => "ENTER",
         VirtualKey.Tab => "TAB",
         VirtualKey.Left => "LEFT",
@@ -161,13 +199,21 @@ public sealed partial class MainWindow
         VirtualKey.Down => "DOWN",
         VirtualKey.PageUp => "PAGEUP",
         VirtualKey.PageDown => "PAGEDOWN",
-        VirtualKey.F6 => "F6",
         _ => null,
     };
 
     void OnKey(object sender, KeyRoutedEventArgs e)
     {
-        if (palette.IsOpen) return;
+        if (palette.IsOpen || recordingShortcut is not null) return;
+        if (settingsPage is not null)
+        {
+            // While Settings is open only Esc and the Settings shortcut act; the rest belongs to its controls.
+            if (e.Key == VirtualKey.Escape) { e.Handled = true; CloseSettingsPage(); return; }
+            if (KeyName(e.Key) is { } k && keys.Effective("Settings") is { Length: > 0 } sc
+                && new Chord(Down(VirtualKey.Control), Down(VirtualKey.Menu), Down(VirtualKey.Shift), k) == Chord.Parse(sc))
+            { e.Handled = true; CloseSettingsPage(); }
+            return;
+        }
         if (KeyName(e.Key) is not { } key) return;
         var chord = new Chord(Down(VirtualKey.Control), Down(VirtualKey.Menu), Down(VirtualKey.Shift), key);
         // Ctrl+L belongs to the shell in a terminal, and focuses the address bar in a browser tab (Edge default, D-03).
@@ -237,9 +283,9 @@ public sealed partial class MainWindow
         RenderContent();
     }
 
-    void SetTheme(bool dark)
+    void SetTheme(ThemeKind kind)
     {
-        Theme.Use(dark);
+        Theme.Use(kind);
         foreach (var (s, panel) in panels.ToList())
             if (panel is BrowserPanel bp) { browsers.Close(bp); panels.Remove(s); }
         palette.Background = Theme.Brush("Overlay");

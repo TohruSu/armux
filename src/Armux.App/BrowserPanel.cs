@@ -95,7 +95,7 @@ public sealed partial class BrowserPanel : Grid
         else url.Focus(FocusState.Programmatic);
     }
 
-    /// <summary>Navigates to an address, or searches when the text does not look like one (Edge's default, D-03).</summary>
+    /// <summary>Navigates to an address, or searches with the engine from Settings when the text does not look like one.</summary>
     void Go(string input)
     {
         var target = AddressOrSearch(input);
@@ -114,7 +114,13 @@ public sealed partial class BrowserPanel : Grid
         bool local = input.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) || input.StartsWith("127.0.0.1", StringComparison.Ordinal);
         if (local) return "http://" + input;
         if (!input.Contains(' ') && input.Contains('.') && Uri.TryCreate("https://" + input, UriKind.Absolute, out var guess)) return guess.ToString();
-        return "https://www.bing.com/search?q=" + Uri.EscapeDataString(input);
+        string q = Uri.EscapeDataString(input);
+        return Theme.Settings.SearchEngine switch
+        {
+            "google" => "https://www.google.com/search?q=" + q,
+            "duckduckgo" => "https://duckduckgo.com/?q=" + q,
+            _ => "https://www.bing.com/search?q=" + q,
+        };
     }
 
     /// <summary>Ctrl+L (Edge default): focus the address bar.</summary>

@@ -47,7 +47,7 @@ public sealed partial class FileView : Grid
                 Text = text,
                 FontFamily = Theme.TerminalFont,
                 FontSize = Theme.TerminalFontSize,
-                LineHeight = Math.Round(Theme.TerminalFontSize * 1.4),
+                LineHeight = Math.Round(Theme.TerminalFontSize * Theme.Settings.LineHeight),
                 Foreground = Theme.Term(TermColor.Default),
                 IsTextSelectionEnabled = true,
             });

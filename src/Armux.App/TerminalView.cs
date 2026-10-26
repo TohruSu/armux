@@ -34,6 +34,7 @@ public sealed partial class TerminalView : UserControl
     readonly Rectangle cursor = new() { IsHitTestVisible = false };
     readonly ScrollBar bar = new() { Orientation = Orientation.Vertical, IndicatorMode = ScrollingIndicatorMode.MouseIndicator, Visibility = Visibility.Collapsed };
     readonly DebounceTimer resize;
+    readonly Blinker blink;
     readonly List<Rectangle> selectionRects = [];
     TextBlock[] rowBlocks = [];
     List<Rectangle>[] rowRects = [];
@@ -77,11 +78,12 @@ public sealed partial class TerminalView : UserControl
 
         MeasureCell();
         resize = new DebounceTimer(DispatcherQueue, TimeSpan.FromMilliseconds(60), ApplySize);
+        blink = new Blinker(this);
         bar.Scroll += (_, e) => { viewTop = (int)Math.Round(e.NewValue); follow = viewTop >= ScrollbackCount(); Render(force: false); };
 
         SizeChanged += (_, _) => { if (!session.Started) ApplySize(); else resize.Restart(); };
         Loaded += (_, _) => { session.Changed -= OnChanged; session.Changed += OnChanged; Render(force: true); };
-        Unloaded += (_, _) => session.Changed -= OnChanged;
+        Unloaded += (_, _) => { session.Changed -= OnChanged; blink.Stop(); };
         GotFocus += (_, _) => { hasFocus = true; if (session.Terminal.FocusReporting) session.Send("\u001b[I"); DrawCursor(); };
         LostFocus += (_, _) => { hasFocus = false; if (session.Terminal.FocusReporting) session.Send("\u001b[O"); DrawCursor(); };
         CharacterReceived += OnCharacter;
@@ -98,15 +100,13 @@ public sealed partial class TerminalView : UserControl
 
     // ---- layout ------------------------------------------------------------------------------
 
-    /// <summary>Cell size of the terminal font: the advance of "M" and a line height of 1.4 em.</summary>
+    /// <summary>Cell size of the terminal font: the advance of "M" and the line height from Settings.</summary>
     void MeasureCell()
     {
         var probe = new TextBlock { Text = new string('M', 64), FontFamily = Theme.TerminalFont, FontSize = Theme.TerminalFontSize, IsTextScaleFactorEnabled = false };
         probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
         cellW = Math.Max(1, probe.DesiredSize.Width / 64);
-        cellH = Math.Round(Theme.TerminalFontSize * 1.4);
-        cursor.Width = cellW;
-        cursor.Height = cellH;
+        cellH = Math.Round(Theme.TerminalFontSize * Theme.Settings.LineHeight);
     }
 
     (int Cols, int Rows) GridSize()
@@ -185,11 +185,17 @@ public sealed partial class TerminalView : UserControl
                 IsTextScaleFactorEnabled = false,
                 Foreground = TerminalColors.DefaultForeground,
             };
+            if (!Theme.Settings.Ligatures)
+            {
+                Microsoft.UI.Xaml.Documents.Typography.SetStandardLigatures(rowBlocks[r], false);
+                Microsoft.UI.Xaml.Documents.Typography.SetContextualAlternates(rowBlocks[r], false);
+            }
             rowsPanel.Children.Add(rowBlocks[r]);
             rowRects[r] = [];
         }
     }
 
+    /// <summary>Text, background and attributes of a row; equal hashes skip redrawing it.</summary>
     static int Hash(Cell[] cells)
     {
         var h = new HashCode();
@@ -246,12 +252,49 @@ public sealed partial class TerminalView : UserControl
         bool visible = term.CursorVisible && session.Live && session.Started && !session.Exited && y >= 0 && y < term.Rows;
         cursor.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         if (!visible) return;
+        // Shape from Settings. Unfocused, a block becomes an outline, as in most terminals.
+        string style = Theme.Settings.CursorStyle;
+        cursor.Width = style == "bar" ? 2 : cellW;
+        cursor.Height = style == "underline" ? 2 : cellH;
         Canvas.SetLeft(cursor, term.CursorX * cellW);
-        Canvas.SetTop(cursor, y * cellH);
-        // Focused: a translucent block. Unfocused: an outline, as in most terminals.
-        cursor.Fill = hasFocus ? TerminalColors.Cursor : null;
-        cursor.Stroke = hasFocus ? null : TerminalColors.CursorOutline;
+        Canvas.SetTop(cursor, y * cellH + (style == "underline" ? cellH - 2 : 0));
+        bool outline = !hasFocus && style == "block";
+        cursor.Fill = outline ? null : hasFocus ? TerminalColors.Cursor : TerminalColors.CursorOutline;
+        cursor.Stroke = outline ? TerminalColors.CursorOutline : null;
         cursor.StrokeThickness = 1;
+        // A blinking cursor restarts visible after each change; it only blinks while the terminal has focus.
+        cursor.Opacity = 1;
+        if (Theme.Settings.CursorBlink && hasFocus) blink.Restart(); else blink.Stop();
+    }
+
+    /// <summary>Blinks the cursor (Settings > Terminal), stopping after a minute idle so an idle window does no work.</summary>
+    sealed class Blinker(TerminalView view)
+    {
+        readonly Microsoft.UI.Dispatching.DispatcherQueueTimer timer = Create(view);
+        int ticks;
+
+        static Microsoft.UI.Dispatching.DispatcherQueueTimer Create(TerminalView view)
+        {
+            var t = view.DispatcherQueue.CreateTimer();
+            t.Interval = TimeSpan.FromMilliseconds(530);
+            return t;
+        }
+
+        public void Restart()
+        {
+            ticks = 0;
+            timer.Tick -= OnTick;
+            timer.Tick += OnTick;
+            timer.Start();
+        }
+
+        public void Stop() => timer.Stop();
+
+        void OnTick(Microsoft.UI.Dispatching.DispatcherQueueTimer t, object o)
+        {
+            if (++ticks > 113) { t.Stop(); view.cursor.Opacity = 1; return; }   // about a minute
+            view.cursor.Opacity = view.cursor.Opacity > 0 ? 0 : 1;
+        }
     }
 
     // ---- selection and clipboard -------------------------------------------------------------
@@ -541,7 +584,7 @@ public static class TerminalColors
         0x1F1F1F, 0xC91B1B, 0x16823C, 0x8F6A00, 0x1D4ED8, 0x9333EA, 0x0E7490, 0x6B6B6B,
         0x6E6E6E, 0xDC2626, 0x15A34A, 0xA16207, 0x2563EB, 0xA855F7, 0x0891B2, 0x3A3A3A,
     ];
-    static readonly Dictionary<(uint, bool, byte), SolidColorBrush> cache = [];
+    static readonly Dictionary<(uint, ThemeKind, byte), SolidColorBrush> cache = [];
 
     public static SolidColorBrush DefaultForeground => Theme.Brush("Term.Default");
     public static SolidColorBrush Selection => Get(Theme.Dark ? 0x3B82F6u : 0x93C5FDu, 0x66);
@@ -570,7 +613,7 @@ public static class TerminalColors
 
     static SolidColorBrush Get(uint rgb, byte alpha)
     {
-        var key = (rgb, Theme.Dark, alpha);
+        var key = (rgb, Theme.Kind, alpha);
         if (!cache.TryGetValue(key, out var b))
         {
             if (cache.Count > 4096) cache.Clear();   // 24-bit color programs can produce many colors

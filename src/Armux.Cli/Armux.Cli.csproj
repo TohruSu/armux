@@ -5,6 +5,7 @@
     <!-- `armux` on the command line, like cmux's `cmux` CLI. The app is ArmuxApp.exe (deviation D-11). -->
     <AssemblyName>armux</AssemblyName>
     <RootNamespace>Armux.Cli</RootNamespace>
+    <ApplicationIcon>..\Armux.App\Assets\armux.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RuntimeIdentifier>win-arm64</RuntimeIdentifier>

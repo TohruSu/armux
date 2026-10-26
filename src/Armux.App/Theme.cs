@@ -5,13 +5,29 @@ using Windows.UI;
 
 namespace Armux.App;
 
+public enum ThemeKind { Dark, Light, HighContrast }
+
 /// <summary>
-/// Dark and light design tokens. All armux-drawn surfaces read colors from here, so a theme switch
+/// Dark, light and high-contrast design tokens. All armux-drawn surfaces read colors from here, so a theme switch
 /// is one call to <see cref="Use"/> followed by a re-render.
 /// </summary>
 public static class Theme
 {
-    public static bool Dark { get; private set; } = true;
+    public static ThemeKind Kind { get; private set; } = ThemeKind.Dark;
+    /// <summary>High contrast is drawn on black, so it counts as dark for built-in controls and terminal colors.</summary>
+    public static bool Dark => Kind != ThemeKind.Light;
+    public static bool HighContrast => Kind == ThemeKind.HighContrast;
+
+    /// <summary>The theme a setting asks for. "system" follows Windows: its high-contrast mode, else its app mode.</summary>
+    public static ThemeKind Resolve(string setting) => setting switch
+    {
+        "dark" => ThemeKind.Dark,
+        "light" => ThemeKind.Light,
+        "high-contrast" => ThemeKind.HighContrast,
+        _ => new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast ? ThemeKind.HighContrast
+            : new Windows.UI.ViewManagement.UISettings().GetColorValue(Windows.UI.ViewManagement.UIColorType.Background).R < 128
+                ? ThemeKind.Dark : ThemeKind.Light,
+    };
 
     /// <summary>Saved fonts and sizes. Change them with <see cref="UseSettings"/>, then re-render.</summary>
     public static Settings Settings { get; private set; } = new();
@@ -73,19 +89,34 @@ public static class Theme
         ["Term.Cyan"] = (0xFF56C8E8, 0xFF0E7490),
     };
 
-    static readonly Dictionary<(string, bool), SolidColorBrush> cache = [];
+    /// <summary>
+    /// High contrast: white on black, yellow links and a cyan accent, as in Windows' "Night sky" theme. Keys not
+    /// listed fall back to the dark tokens.
+    /// </summary>
+    static readonly Dictionary<string, uint> HighContrastTokens = new()
+    {
+        ["TitleBar"] = 0xFF000000, ["Sidebar"] = 0xFF000000, ["SidebarHover"] = 0xFF1A1A1A, ["Pane"] = 0xFF000000,
+        ["TabBar"] = 0xFF000000, ["TabActive"] = 0xFF000000, ["Divider"] = 0xFFFFFFFF, ["Border"] = 0xFFFFFFFF,
+        ["Text"] = 0xFFFFFFFF, ["TextDim"] = 0xFFFFFFFF, ["TextFaint"] = 0xFFD0D0D0, ["Accent"] = 0xFF1AEBFF,
+        ["SelectedRow"] = 0xFF00405C, ["SelectedText"] = 0xFFFFFFFF, ["SelectedDim"] = 0xFFFFFFFF, ["Link"] = 0xFFFFFF00,
+        ["Overlay"] = 0xCC000000, ["Palette"] = 0xFF000000, ["PaletteSelected"] = 0xFF00405C, ["Input"] = 0xFF000000,
+        ["Term.Default"] = 0xFFFFFFFF, ["Term.Dim"] = 0xFFD0D0D0, ["Term.Green"] = 0xFF3FF23F, ["Term.Blue"] = 0xFF5CB8FF,
+        ["Term.Yellow"] = 0xFFFFFF00, ["Term.Red"] = 0xFFFF6B6B, ["Term.Magenta"] = 0xFFFF7BFF, ["Term.Cyan"] = 0xFF1AEBFF,
+    };
 
-    public static void Use(bool dark) => Dark = dark;
+    static readonly Dictionary<(string, ThemeKind), SolidColorBrush> cache = [];
+
+    public static void Use(ThemeKind kind) => Kind = kind;
 
     public static Color Color(string key)
     {
-        uint v = Dark ? Tokens[key].Dark : Tokens[key].Light;
+        uint v = HighContrast && HighContrastTokens.TryGetValue(key, out var hc) ? hc : Dark ? Tokens[key].Dark : Tokens[key].Light;
         return ColorHelper.FromArgb((byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v);
     }
 
     public static SolidColorBrush Brush(string key)
     {
-        if (!cache.TryGetValue((key, Dark), out var b)) cache[(key, Dark)] = b = new SolidColorBrush(Color(key));
+        if (!cache.TryGetValue((key, Kind), out var b)) cache[(key, Kind)] = b = new SolidColorBrush(Color(key));
         return b;
     }
 

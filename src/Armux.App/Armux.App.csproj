@@ -15,6 +15,7 @@
     <SelfContained>false</SelfContained>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\armux.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsAotCompatible>true</IsAotCompatible>
@@ -33,6 +34,8 @@
     <!-- Zed's default fonts: Lilex (terminal) and IBM Plex Sans (interface), SIL OFL-1.1, approved for fonts
          2026-10-26. Their license files must ship with them. -->
     <Content Include="Assets\Fonts\*.ttf;Assets\Fonts\*.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The window and taskbar icon (AppWindow.SetIcon reads it from the app folder); the exe embeds it too. -->
+    <Content Include="Assets\armux.ico;Assets\armux-logo.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Armux.Core\Armux.Core.csproj" />

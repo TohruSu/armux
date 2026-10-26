@@ -57,4 +57,19 @@ public readonly record struct Chord(bool Ctrl, bool Alt, bool Shift, string Key)
 
     public override string ToString() =>
         string.Join("+", new[] { Ctrl ? "Ctrl" : null, Alt ? "Alt" : null, Shift ? "Shift" : null, Key }.Where(s => s is not null));
+
+    /// <summary>For people: "Ctrl+PAGEDOWN" reads "Ctrl+PageDown". "" stays "".</summary>
+    public static string Display(string chord)
+    {
+        if (chord.Trim().Length == 0) return "";
+        var c = Parse(chord);
+        string key = c.Key switch
+        {
+            "PAGEUP" => "PageUp", "PAGEDOWN" => "PageDown", "ENTER" => "Enter", "TAB" => "Tab", "SPACE" => "Space",
+            "LEFT" => "Left", "RIGHT" => "Right", "UP" => "Up", "DOWN" => "Down", "HOME" => "Home", "END" => "End",
+            "INSERT" => "Insert", "DELETE" => "Delete",
+            _ => c.Key,
+        };
+        return string.Join("+", new[] { c.Ctrl ? "Ctrl" : null, c.Alt ? "Alt" : null, c.Shift ? "Shift" : null, key }.Where(s => s is not null));
+    }
 }

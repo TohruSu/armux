@@ -14,10 +14,19 @@ const string Usage = """
       open <url>                                   Open a page in a browser split beside the terminal
       list                                         List workspaces and their tabs
       ping                                         Check that armux is running
+      --version                                    Print the version
 
     options:
       --surface ID   Target another tab (default: $ARMUX_SURFACE_ID, else the focused tab)
     """;
+
+if (args.Length > 0 && args[0] is "--version" or "-v" or "version")
+{
+    var v = typeof(Request).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown";
+    Console.WriteLine("armux " + (v.Contains('+') ? v[..Math.Min(v.Length, v.IndexOf('+') + 8)] : v));
+    return 0;
+}
 
 if (args.Length == 0 || args[0] is "-h" or "--help" or "help")
 {

@@ -17,7 +17,14 @@ public static class Toasts
 
     public static void ShowIfInactive(MainWindow window, int surfaceId, string workspace, string title, string body)
     {
-        if (window.IsActiveWindow || failed) return;
+        if (window.IsActiveWindow || !Theme.Settings.Toasts) return;
+        Show(window, surfaceId, workspace, title, body);
+    }
+
+    /// <summary>Shows a toast now (Settings > Notifications > Test uses this while armux is in front).</summary>
+    public static void Show(MainWindow window, int surfaceId, string workspace, string title, string body)
+    {
+        if (failed) return;
         try
         {
             if (!registered)

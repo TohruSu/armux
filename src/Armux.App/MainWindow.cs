@@ -48,6 +48,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
     public bool IsActiveWindow { get; private set; } = true;
 
     readonly Viewbox zoomHost = new() { Stretch = Stretch.Fill };
+    readonly Windows.UI.ViewManagement.UISettings uiSettings = new();
 
     void ApplyZoom(Windows.Foundation.Size size)
     {
@@ -74,11 +75,15 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         this.opts = opts;
         state = opts.BuildState();
         browsers = new BrowserHost(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
-        Theme.Use(opts.Theme != "light");
+        // --theme (screenshots) wins over the saved theme.
+        Theme.Use(Theme.Resolve(opts.Theme ?? Theme.Settings.Theme));
+        state.Indicator = Indicator(Theme.Settings.WorkspaceIndicator);
         Title = "armux";
         ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(opts.Width, opts.Height));
+        try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "armux.ico")); }
+        catch (Exception e) { App.Log("SetIcon", e); }
 
         BuildChrome();
         RegisterCommands();
@@ -102,6 +107,15 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
             state.WindowActive = IsActiveWindow;
         };
         Toasts.Invoked += JumpToSurface;
+        // "Match Windows" follows app-mode and contrast-theme changes while armux runs.
+        uiSettings.ColorValuesChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (opts.Theme is null && Theme.Settings.Theme == "system" && Theme.Resolve("system") != Theme.Kind)
+            {
+                SetTheme(Theme.Resolve("system"));
+                if (settingsPage is not null) ShowSettingsPage(settingsSection);
+            }
+        });
         palette.Closed += FocusKeys;
         // Diagnostics: ARMUX_FOCUS_LOG=<file> records every keyboard focus change.
         if (Environment.GetEnvironmentVariable("ARMUX_FOCUS_LOG") is { Length: > 0 } focusLog)
@@ -183,6 +197,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         bellFlyout.Opening += (_, _) => bellFlyout.Content = NotificationsList();
         left.Children.Add(bellButton);
         left.Children.Add(Ui.IconButton(Ui.Glyph(Ui.Add, 13, dim), "New workspace (Ctrl+Shift+N)", NewWorkspace));
+        left.Children.Add(Ui.IconButton(Ui.Glyph(Ui.Gear, 13, dim), "Settings (Ctrl+Shift+,)", ToggleSettingsPage));
         titleRow.Children.Add(left);
 
         dragRegion.Children.Clear();
@@ -214,7 +229,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         var ws = state.Current;
         titleText.Text = ws is null ? "armux" : ws.Zoomed is null ? ws.Title : $"{ws.Title}  ·  zoomed";
         Title = ws is null ? "armux" : $"{ws.Title} - armux";
-        titleLeft.Width = new GridLength(sidebarVisible ? SidebarWidth : 150);
+        titleLeft.Width = new GridLength(sidebarVisible ? SidebarWidth : 180);
     }
 
     void UpdateBell()
@@ -329,8 +344,8 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
     /// <summary>Gives keyboard focus to the focused pane's terminal, or to the key sink when it has none.</summary>
     void FocusKeys() => DispatcherQueue.TryEnqueue(() =>
     {
-        // A dialog, menu or flyout that is open keeps the keyboard.
-        if (palette.IsOpen || root.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Count > 0) return;
+        // A dialog, menu or flyout that is open keeps the keyboard, and so does the Settings page.
+        if (palette.IsOpen || settingsPage is not null || root.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Count > 0) return;
         if (FocusedTerminal() is { } t) t.Focus(FocusState.Programmatic);
         else keySink.Focus(FocusState.Programmatic);
     });
@@ -338,7 +353,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
     /// <summary>After a click or tab switch: focus the terminal, but leave focus alone for browser and file tabs.</summary>
     void FocusTerminal() => DispatcherQueue.TryEnqueue(() =>
     {
-        if (palette.IsOpen || root.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Count > 0) return;
+        if (palette.IsOpen || settingsPage is not null || root.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Count > 0) return;
         FocusedTerminal()?.Focus(FocusState.Programmatic);
     });
 
@@ -393,7 +408,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
     public void NewSurface(Pane pane, PanelKind kind)
     {
-        var s = kind == PanelKind.Browser ? new Surface { Kind = PanelKind.Browser, Title = "New tab" } : LiveTerminal();
+        var s = kind == PanelKind.Browser ? NewBrowserSurface() : LiveTerminal();
         pane.Surfaces.Add(s);
         SelectSurface(pane, s);
     }
@@ -629,7 +644,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         if (opts.Explorer) ToggleExplorer();
         if (opts.PromptEditor) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, TogglePromptEditor);
         if (opts.Palette) OpenPalette();
-        if (opts.Settings) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _ = OpenSettingsAsync());
+        if (opts.Settings) ShowSettingsPage(opts.SettingsSection ?? "General");
         if (opts.Notifications) bellFlyout.ShowAt(bellButton);
         if (opts.Menu && sidebarList.Children.Count > 1 && sidebarList.Children[1] is SidebarRow row)
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ShowWorkspaceMenu(state.Workspaces[1], row));

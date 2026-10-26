@@ -21,7 +21,8 @@ public sealed class TerminalSession : IDisposable
     FileStream? ptyLog;
     int renderQueued;
 
-    public Terminal Terminal { get; } = new(80, 24);
+    /// <summary>The emulator; scrollback length comes from Settings when the terminal is created.</summary>
+    public Terminal Terminal { get; } = new(80, 24, Theme.Settings.ScrollbackLines);
     public bool Started { get; private set; }
     public bool Exited { get; private set; }
     /// <summary>A real shell, not a mock terminal replaying canned lines.</summary>

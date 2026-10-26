@@ -18,6 +18,13 @@ public sealed partial class MainWindow
         return new Surface { Kind = PanelKind.Terminal, Title = Shells.Name(kind), Shell = Shells.Name(kind) };
     }
 
+    /// <summary>A browser tab on the new-tab page from Settings, or blank with the address bar focused.</summary>
+    static Surface NewBrowserSurface()
+    {
+        var home = Theme.Settings.BrowserHome.Length > 0 ? BrowserPanel.AddressOrSearch(Theme.Settings.BrowserHome) ?? "" : "";
+        return new Surface { Kind = PanelKind.Browser, Title = home.Length > 0 ? home : "New tab", Url = home };
+    }
+
     (Workspace Ws, Pane Pane)? Locate(Surface surface)
     {
         foreach (var ws in state.Workspaces)
@@ -31,7 +38,8 @@ public sealed partial class MainWindow
         if (sessions.TryGetValue(surface, out var s)) return s;
         var ws = Locate(surface)?.Ws;
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string cwd = FileTree.Resolve(ws?.Cwd ?? "~", home, out _);
+        // New tabs follow the workspace's directory, or start in the start directory (Settings > General).
+        string cwd = FileTree.Resolve(Theme.Settings.NewTabDirectory == "start" ? StartDirectory() : ws?.Cwd ?? "~", home, out _);
         var env = new Dictionary<string, string>
         {
             ["ARMUX_SURFACE_ID"] = surface.Id.ToString(),
@@ -50,7 +58,7 @@ public sealed partial class MainWindow
         s.StateChanged += () => { UpdateTaskbar(); UpdateStatus(surface); };
         s.TitleUpdated += () => UpdateStatus(surface);
         // The bell is how Claude Code (and many programs) ask for attention when no OSC notification is configured.
-        s.Bell += () => OnTerminalNotification(surface, new TermNotification("", "Needs your attention"));
+        s.Bell += () => { if (Theme.Settings.BellNotifies) OnTerminalNotification(surface, new TermNotification("", "Needs your attention")); };
         sessions[surface] = s;
         return s;
     }
@@ -119,7 +127,18 @@ public sealed partial class MainWindow
     void OnProcessExited(Surface surface)
     {
         if (Locate(surface) is not { } at) return;
-        if (state.Workspaces.Sum(w => w.Panes.Sum(p => p.Surfaces.Count)) == 1) { Close(); return; }
+        if (state.Workspaces.Sum(w => w.Panes.Sum(p => p.Surfaces.Count)) == 1)
+        {
+            if (Theme.Settings.CloseOnLastExit) { Close(); return; }
+            // Settings > General: keep the window and start a new shell in the same pane.
+            DisposeSession(surface);
+            panels.Remove(surface);
+            var fresh = LiveTerminal();
+            at.Pane.Surfaces.Add(fresh);
+            at.Pane.Surfaces.Remove(surface);
+            SelectSurface(at.Pane, fresh);
+            return;
+        }
         CloseSurface(at.Pane, surface);
     }
 
@@ -183,7 +202,7 @@ public sealed partial class MainWindow
         var surfaces = ws.Panes.SelectMany(p => p.Surfaces).ToList();
         var status = surfaces.Any(s => s.Unread) ? AgentState.NeedsInput
             : AgentStatus.Max(surfaces.Select(s => sessions.TryGetValue(s, out var t) ? t.State : AgentState.Idle));
-        Taskbar.Show(WinRT.Interop.WindowNative.GetWindowHandle(this), status);
+        Taskbar.Show(WinRT.Interop.WindowNative.GetWindowHandle(this), Theme.Settings.TaskbarStatus ? status : AgentState.Idle);
     }
 
     /// <summary>The sidebar status line and activity dot of the workspace holding <paramref name="surface"/>.</summary>
