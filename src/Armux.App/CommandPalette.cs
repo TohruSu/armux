@@ -77,7 +77,15 @@ public sealed partial class CommandPalette : Grid
         input.Focus(FocusState.Programmatic);
     }
 
-    public void Close() => Visibility = Visibility.Collapsed;
+    /// <summary>Raised after the palette hides; the window gives the keyboard back to the terminal.</summary>
+    public event Action? Closed;
+
+    public void Close()
+    {
+        if (Visibility == Visibility.Collapsed) return;
+        Visibility = Visibility.Collapsed;
+        Closed?.Invoke();
+    }
 
     void Filter()
     {

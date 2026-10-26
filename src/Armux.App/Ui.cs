@@ -39,6 +39,8 @@ public static class Ui
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(5),
+            // Clicking an icon button must not take keyboard focus from the terminal (Tab still reaches it).
+            AllowFocusOnInteraction = false,
         };
         ToolTipService.SetToolTip(b, tip);
         // Icon-only buttons need a name for screen readers (and UI Automation tests).

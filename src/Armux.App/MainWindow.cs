@@ -72,6 +72,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
         Activated += (_, e) => IsActiveWindow = e.WindowActivationState != WindowActivationState.Deactivated;
         Toasts.Invoked += JumpToSurface;
+        palette.Closed += FocusKeys;
         pipe = new PipeServer(DispatcherQueue, HandleRequest);
         pipe.Start();
         Closed += (_, _) =>
@@ -288,16 +289,24 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
     /// <summary>Gives keyboard focus to the focused pane's terminal, or to the key sink when it has none.</summary>
     void FocusKeys() => DispatcherQueue.TryEnqueue(() =>
     {
+        // A dialog, menu or flyout that is open keeps the keyboard.
+        if (palette.IsOpen || root.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Count > 0) return;
         if (FocusedTerminal() is { } t) t.Focus(FocusState.Programmatic);
         else keySink.Focus(FocusState.Programmatic);
     });
 
     /// <summary>After a click or tab switch: focus the terminal, but leave focus alone for browser and file tabs.</summary>
-    void FocusTerminal() => DispatcherQueue.TryEnqueue(() => FocusedTerminal()?.Focus(FocusState.Programmatic));
+    void FocusTerminal() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (palette.IsOpen || root.XamlRoot is null || VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Count > 0) return;
+        FocusedTerminal()?.Focus(FocusState.Programmatic);
+    });
 
     public void FocusPane(Pane pane)
     {
-        if (state.Current is not { } ws || ReferenceEquals(ws.Focused, pane)) return;
+        if (state.Current is not { } ws) return;
+        // Clicking the pane that is already focused still has to give its terminal the keyboard back.
+        if (ReferenceEquals(ws.Focused, pane)) { FocusTerminal(); return; }
         var old = ws.Focused;
         ws.Focused = pane;
         if (pane.Selected is { } s) state.MarkRead(ws, s);
@@ -369,7 +378,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
     void SelectWorkspace(Workspace ws)
     {
-        if (ReferenceEquals(state.Current, ws)) return;
+        if (ReferenceEquals(state.Current, ws)) { FocusKeys(); return; }
         state.Current = ws;
         RenderContent();
         RenderExplorer(rebuild: false);

@@ -55,7 +55,9 @@ public sealed partial class TerminalView : UserControl
         UseSystemFocusVisuals = false;
         Background = Theme.Brush("Pane");
 
-        var grid = new Grid();
+        // UserControl does not draw its Background, and the rows are not hit-testable, so this brush is what makes
+        // the terminal clickable (focus, selection, wheel). Without it clicks fell through to the pane.
+        var grid = new Grid { Background = Theme.Brush("Pane") };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(BarWidth) });
         content.Children.Add(back);
