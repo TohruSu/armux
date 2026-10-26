@@ -55,10 +55,11 @@ jobs:
           # The AOT linker step locates MSVC through vswhere, which is not on PATH by default.
           $env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
           dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publish
+          dotnet publish src/Armux.Cli -c Release -r win-arm64 -o publish
 
       - name: Verify PE machine type is 0xAA64
-        # The shipped binary. (The publish step rebuilds bin/ self-contained, so the JIT build's exe is gone by now.)
-        run: ./scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe
+        # The shipped binaries. (The publish step rebuilds bin/ self-contained, so the JIT build's exe is gone by now.)
+        run: ./scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe publish/armux.exe
 
       - uses: actions/upload-artifact@v7
         with:
