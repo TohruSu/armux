@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Armux.App/Armux.App.csproj" />
+    <Project Path="src/Armux.Cli/Armux.Cli.csproj" />
     <Project Path="src/Armux.Core/Armux.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
