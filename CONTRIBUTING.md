@@ -31,13 +31,13 @@ git clone https://github.com/apaslam09/armux
 cd armux
 dotnet test --project tests/Armux.Core.Tests
 dotnet build src/Armux.App -c Release -p:Platform=ARM64     # fast JIT build for development
-src\Armux.App\bin\ARM64\Release\net10.0-windows10.0.26100.0\win-arm64\ArmuxApp.exe
+src\Armux.App\bin\ARM64\Release\net10.0-windows10.0.26100.0\win-arm64\armux.exe
 
 # Release build (NativeAOT), the one memory numbers are reported for:
 $env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
 dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publish
 dotnet publish src/Armux.Cli -c Release -r win-arm64 -o publish
-pwsh scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe publish/armux.exe
+pwsh scripts/check-pe-arm64.ps1 publish/armux.exe publish/armux.com
 ```
 
 Useful launch flags for UI work: `--scenario live|demo|idle|panes|browser` (`live`, the default, starts real shells; the others use mock terminals), `--panes N`, `--theme light`, `--palette`, `--notifications`, `--zoom`, `--select N`, `--explorer`, `--settings [General|Appearance|Terminal|Keyboard|Notifications|Browser|About]`, `--prompt-editor`, `--rename` (opens the rename dialog after 3 s, for testing that Enter stays out of the terminal) (see `src/Armux.App/LaunchOptions.cs`). Set `ARMUX_SETTINGS_FILE` to a scratch path so screenshots and measurements use default fonts, not your own settings. `scripts/screenshot.ps1` captures the window, and `scripts/bench.ps1` measures start-up and memory.
@@ -53,7 +53,7 @@ To drive live terminals in tests, use the CLI instead of keystrokes: `armux send
 - **`'vswhere.exe' is not recognized` during `dotnet publish`.** The NativeAOT linker step finds MSVC through vswhere. Put `C:\Program Files (x86)\Microsoft Visual Studio\Installer` on `PATH` first, as shown above.
 - **`NETSDK1102` when publishing.** NativeAOT needs a self-contained publish. The project sets this automatically for `dotnet publish`; don't pass `--self-contained false`.
 - **`dotnet test` fails with "Testing with VSTest target is no longer supported".** Use `dotnet test --project ...`; `global.json` opts in to Microsoft.Testing.Platform.
-- **`Armux.Core.dll` reports machine `0x014C`.** It's an IL-only (AnyCPU) library and runs as ARM64. Only the AOT `ArmuxApp.exe` is checked.
+- **`Armux.Core.dll` reports machine `0x014C`.** It's an IL-only (AnyCPU) library and runs as ARM64. Only the AOT `armux.exe` and `armux.com` are checked.
 - **ARM64EC is not ARM64.** ARM64EC binaries report machine type `0x8664`. The PE check rejects them on purpose.
 - **Task Manager** can confirm a running process: Details tab, add the Architecture column.
 

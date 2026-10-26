@@ -46,7 +46,7 @@ public sealed partial class MainWindow
             ["ARMUX_SURFACE_ID"] = surface.Id.ToString(),
             ["ARMUX_WORKSPACE_ID"] = (ws?.Id ?? 0).ToString(),
             ["ARMUX_PIPE"] = PipeServer.PipeName,
-            // armux.exe ships next to ArmuxApp.exe, so `armux notify` works in every armux terminal.
+            // armux.com (the CLI) ships next to armux.exe, so `armux notify` works in every armux terminal.
             ["PATH"] = AppContext.BaseDirectory.TrimEnd('\\') + ";" + Environment.GetEnvironmentVariable("PATH"),
         };
         s = new TerminalSession(surface, DispatcherQueue, cwd, env);

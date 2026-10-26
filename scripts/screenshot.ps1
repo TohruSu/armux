@@ -7,7 +7,7 @@
   is captured even when another window covers it. The app is closed afterwards.
 
 .EXAMPLE
-  ./scripts/screenshot.ps1 -Exe publish/ArmuxApp.exe -Out shots/demo.png -ArgumentList '--scenario','demo'
+  ./scripts/screenshot.ps1 -Exe publish/armux.exe -Out shots/demo.png -ArgumentList '--scenario','demo'
 #>
 param(
     [Parameter(Mandatory)] [string] $Exe,

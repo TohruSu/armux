@@ -2,8 +2,9 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <!-- `armux` on the command line, like cmux's `cmux` CLI. The app is ArmuxApp.exe (deviation D-11). -->
-    <AssemblyName>armux</AssemblyName>
+    <!-- `armux` on the command line, like cmux's `cmux` CLI. Built as armux-cli.exe and published as armux.com
+         beside the app's armux.exe (deviation D-11). -->
+    <AssemblyName>armux-cli</AssemblyName>
     <RootNamespace>Armux.Cli</RootNamespace>
     <ApplicationIcon>..\Armux.App\Assets\armux.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
@@ -14,6 +15,11 @@
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
+  <!-- PowerShell and cmd run .com before .exe, so typing `armux` runs the CLI while Explorer and the Start menu open
+       the app (Visual Studio ships devenv.com and devenv.exe the same way). -->
+  <Target Name="ShipAsCom" AfterTargets="CopyNativeBinary">
+    <Move SourceFiles="$(PublishDir)$(AssemblyName).exe" DestinationFiles="$(PublishDir)armux.com" OverwriteReadOnlyFiles="true" />
+  </Target>
   <ItemGroup>
     <ProjectReference Include="..\Armux.Core\Armux.Core.csproj" />
   </ItemGroup>

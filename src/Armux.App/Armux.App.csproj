@@ -4,8 +4,10 @@
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion>
     <RootNamespace>Armux.App</RootNamespace>
-    <!-- "armux.exe" is reserved for the CLI (Phase 3), as cmux ships a `cmux` CLI next to its app. -->
-    <AssemblyName>ArmuxApp</AssemblyName>
+    <!-- The app is armux.exe; the CLI ships beside it as armux.com (deviation D-11). -->
+    <AssemblyName>armux</AssemblyName>
+    <!-- Program.cs hands CLI command lines to armux.com before the UI starts. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <Platforms>ARM64</Platforms>
     <Platform>ARM64</Platform>
     <RuntimeIdentifier>win-arm64</RuntimeIdentifier>

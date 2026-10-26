@@ -15,10 +15,10 @@
   within 5 s.
 
 .EXAMPLE
-  ./scripts/bench.ps1 -Exe publish/ArmuxApp.exe -ArgumentList '--scenario','idle' -Label idle
+  ./scripts/bench.ps1 -Exe publish/armux.exe -ArgumentList '--scenario','idle' -Label idle
   (Run it from a pwsh prompt. `pwsh -File` passes an array argument as one string.)
 .EXAMPLE
-  ./scripts/bench.ps1 -Exe publish/ArmuxApp.exe -ArgumentList '--scenario','browser','--close-after','5000' -SettleSeconds 70 -Runs 0 -Label browser-closed
+  ./scripts/bench.ps1 -Exe publish/armux.exe -ArgumentList '--scenario','browser','--close-after','5000' -SettleSeconds 70 -Runs 0 -Label browser-closed
 #>
 param(
     [Parameter(Mandatory)] [string] $Exe,

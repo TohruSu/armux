@@ -6,7 +6,7 @@ A terminal workspace app for **Windows 11 on ARM64**, modeled on [cmux](https://
 
 [![ci](https://github.com/apaslam09/armux/actions/workflows/ci.yml/badge.svg)](https://github.com/apaslam09/armux/actions/workflows/ci.yml)
 
-> **Status: Phase 3 (real shells), in review.** PowerShell and cmd run through ConPTY in armux's own terminal emulator; OSC 9 / 99 / 777 light up notification rings and Windows toasts; the browser loads real pages; the `armux` CLI talks to the app. See the [roadmap](ARCHITECTURE.md#roadmap).
+> **Status: 0.3.0, the first release.** PowerShell and cmd run through ConPTY in armux's own terminal emulator; OSC 9 / 99 / 777 light up notification rings, Windows toasts and the taskbar button; the browser loads real pages; the `armux` CLI talks to the app; a Settings page covers themes, fonts and every shortcut. See the [roadmap](ARCHITECTURE.md#roadmap).
 
 ![armux with two PowerShell panes, the file explorer and a notification ring](docs/screenshots/13-live-shells.png)
 
@@ -41,7 +41,7 @@ More screenshots: [browser and CLI](docs/screenshots/14-browser-and-cli.png), [c
 
 ## The `armux` CLI
 
-`armux.exe` ships next to `ArmuxApp.exe` and is on the PATH of every armux terminal, which also sets `ARMUX_SURFACE_ID` so commands act on the calling tab:
+The CLI ships as `armux.com` next to the app's `armux.exe` and is on the PATH of every armux terminal. PowerShell and cmd run `.com` before `.exe`, so `armux` reaches the CLI (in Git Bash, `armux.exe notify ...` forwards to it). Every armux terminal also sets `ARMUX_SURFACE_ID`, so commands act on the calling tab:
 
 ```powershell
 armux notify "Tests finished: 24 passed"          # ring + badge on this tab, a toast if armux is in the background
@@ -52,6 +52,10 @@ armux list                                        # workspaces and tabs with the
 ```
 
 Programs can also notify without the CLI by printing OSC 9 (`ESC ] 9 ; text BEL`), OSC 777 (`ESC ] 777 ; notify ; title ; body BEL`) or OSC 99 (kitty).
+
+## Download
+
+Get `armux-<version>-win-arm64.zip` from [Releases](https://github.com/apaslam09/armux/releases), extract it anywhere (for example `%LOCALAPPDATA%\Programs\armux`) and run `armux.exe`. To use the CLI outside armux terminals too, add that folder to your PATH. There is no installer yet; settings live in `%LOCALAPPDATA%\armux\settings.json`.
 
 ## Requirements
 
@@ -68,14 +72,14 @@ cd armux
 dotnet test --project tests/Armux.Core.Tests
 dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publish
 dotnet publish src/Armux.Cli -c Release -r win-arm64 -o publish
-publish\ArmuxApp.exe
+publish\armux.exe
 ```
 
 ## Measuring memory
 
 ```powershell
-./scripts/measure-memory.ps1 -Name ArmuxApp
-./scripts/bench.ps1 -Exe publish/ArmuxApp.exe -ArgumentList '--scenario','live','--panes','4'
+./scripts/measure-memory.ps1 -Name armux
+./scripts/bench.ps1 -Exe publish/armux.exe -ArgumentList '--scenario','live','--panes','4'
 ```
 
 `measure-memory.ps1` sums working set, private bytes and Task Manager memory across the app and every process it starts (WebView2, ConPTY hosts, shells), and reports app cost and shell cost separately. `bench.ps1` adds cold-start time.

@@ -2,9 +2,10 @@ using System.IO.Pipes;
 using System.Text;
 using Armux.Core;
 
-// armux: the command-line companion of ArmuxApp, like cmux's `cmux` CLI. It talks to the running app over the
-// named pipe described in Armux.Core.Ipc. Inside an armux terminal, ARMUX_PIPE selects the window and
-// ARMUX_SURFACE_ID the calling terminal; outside, the first running armux window answers.
+// armux: the command-line companion of the armux app, like cmux's `cmux` CLI. It ships as armux.com beside the
+// app's armux.exe and talks to the running app over the named pipe described in Armux.Core.Ipc. Inside an armux
+// terminal, ARMUX_PIPE selects the window and ARMUX_SURFACE_ID the calling terminal; outside, the first running
+// armux window answers.
 
 const string Usage = """
     usage: armux <command> [options]

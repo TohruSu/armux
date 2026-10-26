@@ -6,7 +6,7 @@ Status: **Phase 3 complete (2026-10-26), awaiting maintainer review.** armux run
 
 armux is a terminal workspace app for **Windows 11 on ARM64**. It follows the UI and feature set of [cmux](https://github.com/manaflow-ai/cmux), the macOS app, as closely as Windows allows.
 
-- Target: `win-arm64`. The shipped `ArmuxApp.exe` is NativeAOT ARM64 code with PE machine type `0xAA64`, checked by `scripts/check-pe-arm64.ps1` in CI.
+- Target: `win-arm64`. The shipped app `armux.exe` (and the CLI `armux.com`) is NativeAOT ARM64 code with PE machine type `0xAA64`, checked by `scripts/check-pe-arm64.ps1` in CI.
 - Not in scope: macOS, Linux, x64, ARM64EC. x64 users already have other options (section 2).
 - Resource efficiency is a product requirement. Memory is measured, budgeted and reported per scenario (section 7).
 
@@ -16,15 +16,16 @@ armux is a terminal workspace app for **Windows 11 on ARM64**. It follows the UI
 |---|---|---|
 | 1 | Repository, docs, CI on a native ARM64 runner | Done 2026-10-25 |
 | 2 | Full cmux-style UI on mock data, stack comparison, memory measurements | Done 2026-10-26 |
-| 3 | ConPTY shells (pwsh, cmd), terminal emulation and rendering, OSC 9/99/777 notifications, real browser navigation, `armux` CLI. WSL dropped by the maintainer (D-21). | Done 2026-10-26, in review |
+| 3 | ConPTY shells (pwsh, cmd), terminal emulation and rendering, OSC 9/99/777 notifications, real browser navigation, `armux` CLI. WSL dropped by the maintainer (D-21). | Done 2026-10-26 |
+| 0.3.0 | First release: Settings page (themes including high contrast, fonts, zoom, every shortcut rebindable, About), app icon, taskbar status, prompt editor, mouse support, warning before closing while programs run; the app is renamed `armux.exe` (CLI `armux.com`, D-11). Release builds come from `.github/workflows/release.yml` on a `v*` tag. | Released 2026-10-26 |
 
 ### Repository layout
 
 | Path | What |
 |---|---|
 | `src/Armux.Core` | UI-free model: workspaces, split tree, notifications, palette search, settings, file tree, the terminal emulator (`Vt/`), ConPTY sessions (`Pty/`) and the pipe protocol (`Ipc.cs`). Unit-tested. |
-| `src/Armux.App` | WinUI 3 app (`ArmuxApp.exe`). Views are built in C#; only `App.xaml` is XAML. |
-| `src/Armux.Cli` | The `armux` CLI (`armux.exe`), NativeAOT, no dependencies beyond Core. |
+| `src/Armux.App` | WinUI 3 app (`armux.exe`). Views are built in C#; only `App.xaml` is XAML. |
+| `src/Armux.Cli` | The `armux` CLI (`armux.com`), NativeAOT, no dependencies beyond Core. |
 | `tests/Armux.Core.Tests` | MSTest tests for the core, including a live ConPTY round trip. |
 | `scripts/` | `measure-memory.ps1`, `bench.ps1`, `screenshot.ps1`, `check-pe-arm64.ps1` |
 | `docs/screenshots/` | Screenshots: 01–12 on mock data, 13–14 from live shells |
@@ -152,13 +153,13 @@ The best Tauri variant still loses to Warp on working set (+31%) and Task Manage
 
 - .NET SDK 10.0.402 (pinned by `global.json`, roll forward within 10.0), Windows App SDK 1.8.260921001, Visual Studio 2022/2026 with the MSVC ARM64 tools and Windows 11 SDK (for the AOT linker).
 - `dotnet build` produces a framework-dependent JIT build for development. `dotnet publish` produces the self-contained NativeAOT release build. The AOT linker finds MSVC through `vswhere.exe`, so its folder must be on `PATH`.
-- `Armux.Core.dll` in a `dotnet build` output is IL-only (AnyCPU) and reports PE machine `0x014C`. It runs as ARM64 code. The NativeAOT `ArmuxApp.exe` contains everything as ARM64 code.
+- `Armux.Core.dll` in a `dotnet build` output is IL-only (AnyCPU) and reports PE machine `0x014C`. It runs as ARM64 code. The NativeAOT `armux.exe` contains everything as ARM64 code.
 
 ## 7. Memory budget
 
 ### Method
 
-`scripts/measure-memory.ps1 -Name ArmuxApp` walks the process tree from the app by `ParentProcessId` (with a creation-time check against PID reuse). For each process it reads three numbers and sums them:
+`scripts/measure-memory.ps1 -Name armux` walks the process tree from the app by `ParentProcessId` (with a creation-time check against PID reuse). For each process it reads three numbers and sums them:
 
 - **Working set** (`WorkingSet64`): resident pages, including shared DLL pages.
 - **Private bytes** (`PrivateMemorySize64`): committed private memory, resident or not.
@@ -168,13 +169,13 @@ It takes 5 samples 1 s apart and reports the median. Processes are grouped:
 
 | Category | Processes | Counts against budget |
 |---|---|---|
-| app | `ArmuxApp.exe` and helpers | yes |
+| app | `armux.exe` and helpers | yes |
 | webview | `msedgewebview2.exe` | yes |
 | conpty | `OpenConsole.exe`, `conhost.exe` | yes |
 | shell | `pwsh`, `powershell`, `cmd`, `wsl`, `wslhost`, `bash` | reported, not budgeted |
 | workload | anything a shell started | reported, not budgeted |
 
-**app-attributable** = app + webview + conpty. `scripts/bench.ps1` launches a scenario, measures cold start (process creation to first rendered frame, median of 10 after one warm-up), then memory after a settle period. Scenarios are reproducible with `ArmuxApp.exe --scenario idle|panes|browser|demo` (see `LaunchOptions.cs`).
+**app-attributable** = app + webview + conpty. `scripts/bench.ps1` launches a scenario, measures cold start (process creation to first rendered frame, median of 10 after one warm-up), then memory after a settle period. Scenarios are reproducible with `armux.exe --scenario idle|panes|browser|demo` (see `LaunchOptions.cs`).
 
 ### Targets (revised 2026-10-25 for WinUI, app-attributable, summed)
 
@@ -229,7 +230,7 @@ The open/close cycles were driven through UI Automation (`InvokePattern` on the 
 
 ### Phase 3 results (2026-10-26, NativeAOT, real shells)
 
-`--scenario live` (the default) starts the default shell from Settings in every pane; `ARMUX_SETTINGS_FILE` pointed at defaults (PowerShell 7.6, Lilex). App-attributable = ArmuxApp + one `conhost.exe` (ConPTY host) per pane. Shells are reported separately, as the method says.
+`--scenario live` (the default) starts the default shell from Settings in every pane; `ARMUX_SETTINGS_FILE` pointed at defaults (PowerShell 7.6, Lilex). App-attributable = armux + one `conhost.exe` (ConPTY host) per pane. Shells are reported separately, as the method says.
 
 | Scenario | Working set | Private | Task Manager | Target |
 |---|---|---|---|---|
@@ -247,9 +248,9 @@ Shells, not budgeted: one `pwsh.exe` 91.5 / 25.6 / 20.3, one `cmd.exe` 9.3 / 5.8
 
 Notes:
 
-- The 80,000-line run was 20,000 PowerShell error messages. ArmuxApp used 6.8 s of CPU in total for it. Scrollback lines are stored packed (text plus attribute runs), not as cell arrays.
+- The 80,000-line run was 20,000 PowerShell error messages. armux used 6.8 s of CPU in total for it. Scrollback lines are stored packed (text plus attribute runs), not as cell arrays.
 - Rendering is idle when output is idle: a render is queued only when bytes arrive, and only changed rows are rebuilt.
-- Executables: `ArmuxApp.exe` 9.5 MB, `armux.exe` (CLI) 2.7 MB, both NativeAOT ARM64.
+- Executables: `armux.exe` 9.5 MB, `armux.com` (CLI) 2.7 MB, both NativeAOT ARM64.
 
 ### Browser panel policy (implemented in `BrowserHost`)
 
@@ -322,7 +323,7 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | D-08 | macOS traffic-light window buttons on the left | Windows caption buttons on the right | Maintainer request: macOS-only chrome is replaced by Windows chrome. |
 | D-09 | SF Pro | IBM Plex Sans (Zed's interface font, ".ZedSans"), bundled, for the interface and built-in controls; Segoe UI Variable as fallback | Maintainer request (2026-10-25: Windows font; 2026-10-26: Zed's font, to match Lilex). SF Pro is not licensed for Windows apps. Terminal font: D-15. |
 | D-10 | Color presets in the right-click menu | Right-click menu opens a 17-swatch flyout | A swatch grid is quicker to scan than 17 text items in a Windows menu. |
-| D-11 | App and CLI both named `cmux` | App `ArmuxApp.exe`; `armux.exe` is reserved for the CLI | Windows file names are case-insensitive, so the app and CLI need different names in one folder. |
+| D-11 | App and CLI both named `cmux` | App `armux.exe`; the CLI is `armux.com` beside it. `armux.exe` started with a CLI command (`notify`, `send`, `list`, ...) runs `armux.com` with the same arguments and exits, so shells that ignore PATHEXT (Git Bash) still work. | Windows file names are case-insensitive, so one folder cannot hold two `armux.exe`. PowerShell and cmd try `.com` before `.exe`, so `armux` reaches the CLI there, while Explorer, the Start menu and the taskbar open the app (Visual Studio's devenv.com and devenv.exe work the same way). Until 0.3.0 the app was `ArmuxApp.exe`. |
 | D-12 | Selected workspace is a blue block with white text | Gray block (lighter than hover) with normal text colors; the unread badge stays blue | Maintainer request (2026-10-26): on blue, the workspace color rail was hard to see. |
 | D-13 | No file explorer | Warp-style file tree, hidden by default. A title-bar button left of the bell, or Ctrl+Shift+E, opens it as a column beside the sidebar, never in place of it. It shows the current workspace's directory; a missing directory falls back to its nearest existing parent. Click opens a file. Context menu: open in new tab, open in new pane, copy path, copy relative path, new file (folders), reveal in File Explorer, open with default app. Icons for common file types; the folders on screen are watched for changes. | Maintainer request (2026-10-26). Warp's "Attach as context" becomes "Insert path in terminal", shown disabled until Phase 3 has real terminals. |
 | D-14 | ⌘1–9 and ⌃⌘] / ⌃⌘[ switch workspaces | Ctrl+1–9 and Ctrl+PageDown / Ctrl+PageUp added; F6 / Shift+F6 cycle panes | Maintainer request (2026-10-26). Ctrl+Shift+Tab stays "previous tab", its standard meaning. Ctrl+digit no longer reaches the shell (Ctrl+2 to Ctrl+7 send rarely used legacy control codes). |
@@ -331,7 +332,7 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | D-17 | Warp opens files in its code editor | Read-only `FileView` tab in the terminal font: first 256 KB; binary files get an "Open with default app" button | armux has no editor; building one is out of scope. |
 | D-18 | Ghostty terminal core, GPU rendered | Own emulator in `Armux.Core.Vt` (VT500 parser, xterm subset that ConPTY emits and full-screen programs use, packed scrollback, reflow on resize), drawn as one XAML TextBlock per row with background rectangles | Ghostty has no Windows library. No dependency was needed, and XAML text keeps memory low (see section 7). Mouse reporting: D-25. Known gaps: no OSC 8 links, no combining marks, and wide characters rely on the font's glyph widths. |
 | D-19 | Shell integration scripts | PowerShell: a prompt wrapper passed with `-EncodedCommand` after the profile loads, emitting OSC 7, plus `LocationChangedAction` (PowerShell 7.1+) so a `cd` inside a longer command line, such as `cd x; claude`, reports at once. cmd: `PROMPT` prefixed with an OSC 7 code. | Lets the sidebar, git branch and explorer follow `cd`. The user's own prompt is kept. |
-| D-20 | `cmux` CLI with many commands | `armux notify`, `send`, `open`, `list`, `ping`; the target tab comes from `ARMUX_SURFACE_ID`, which every armux terminal sets, and `armux.exe` is on each shell's PATH | The commands an agent needs first. More can follow on the same pipe. |
+| D-20 | `cmux` CLI with many commands | `armux notify`, `send`, `open`, `list`, `ping`; the target tab comes from `ARMUX_SURFACE_ID`, which every armux terminal sets, and `armux.com` is on each shell's PATH | The commands an agent needs first. More can follow on the same pipe. |
 | D-21 | (macOS) | No WSL profile | Maintainer decision (2026-10-26): a WSL VM costs far more memory than the app. PowerShell and cmd only. |
 | D-22 | Ghostty font features | Lilex ligatures are on, so `->` and `----` render as ligatures in the terminal | Zed shows the same. A setting to turn them off can come later. |
 | D-23 | (none) | Prompt editor (Ctrl+G, Warp's input editor): a multi-line text box under the terminal with mouse selection, undo and spell check. Ctrl+Enter pastes the text and presses Enter; Shift+Enter or Insert pastes without Enter. Each terminal keeps its draft. | Maintainer request (2026-10-26): easier prompting. Text goes in as one bracketed paste, so newlines do not submit early. |

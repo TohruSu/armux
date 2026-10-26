@@ -1,0 +1,70 @@
+name: release
+
+# Push a tag like v0.3.0 to build armux on a native ARM64 runner and publish a GitHub release with a zip.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build a release for, e.g. v0.3.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: release (windows-11-arm, win-arm64)
+    runs-on: windows-11-arm
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Test core
+        run: dotnet test --project tests/Armux.Core.Tests -c Release
+
+      - name: Publish app and CLI (NativeAOT)
+        run: |
+          $env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
+          dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publish
+          dotnet publish src/Armux.Cli -c Release -r win-arm64 -o publish
+          ./scripts/check-pe-arm64.ps1 publish/armux.exe publish/armux.com
+
+      - name: Zip
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          $zip = "armux-$version-win-arm64.zip"
+          # Debug symbols stay out of the download.
+          Get-ChildItem publish -Recurse -Filter *.pdb | Remove-Item
+          # The font licenses ship in Assets/Fonts.
+          Copy-Item LICENSE publish
+          Compress-Archive -Path publish/* -DestinationPath $zip
+          (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() + "  $zip" | Set-Content "$zip.sha256"
+          "ZIP=$zip" >> $env:GITHUB_ENV
+
+      - name: Create or update the release
+        run: |
+          $notes = "docs/releases/$env:TAG.md"
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG $env:ZIP "$env:ZIP.sha256" --clobber
+          } elseif (Test-Path $notes) {
+            gh release create $env:TAG $env:ZIP "$env:ZIP.sha256" --title "armux $env:TAG" --notes-file $notes
+          } else {
+            gh release create $env:TAG $env:ZIP "$env:ZIP.sha256" --title "armux $env:TAG" --generate-notes
+          }
