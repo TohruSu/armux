@@ -40,7 +40,7 @@ dotnet publish src/Armux.Cli -c Release -r win-arm64 -o publish
 pwsh scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe publish/armux.exe
 ```
 
-Useful launch flags for UI work: `--scenario live|demo|idle|panes|browser` (`live`, the default, starts real shells; the others use mock terminals), `--panes N`, `--theme light`, `--palette`, `--notifications`, `--zoom`, `--select N`, `--explorer`, `--settings` (see `src/Armux.App/LaunchOptions.cs`). Set `ARMUX_SETTINGS_FILE` to a scratch path so screenshots and measurements use default fonts, not your own settings. `scripts/screenshot.ps1` captures the window, and `scripts/bench.ps1` measures start-up and memory.
+Useful launch flags for UI work: `--scenario live|demo|idle|panes|browser` (`live`, the default, starts real shells; the others use mock terminals), `--panes N`, `--theme light`, `--palette`, `--notifications`, `--zoom`, `--select N`, `--explorer`, `--settings`, `--prompt-editor` (see `src/Armux.App/LaunchOptions.cs`). Set `ARMUX_SETTINGS_FILE` to a scratch path so screenshots and measurements use default fonts, not your own settings. `scripts/screenshot.ps1` captures the window, and `scripts/bench.ps1` measures start-up and memory.
 
 `screenshot.ps1 -Keys` and `-Clicks` send real input. They check that armux is the foreground window before each key or click and stop otherwise, but run them only when you are not using the machine. For repeated actions, prefer UI Automation (icon buttons carry automation names), which sends no input to other windows.
 

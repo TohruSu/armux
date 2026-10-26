@@ -21,14 +21,14 @@ A terminal workspace app for **Windows 11 on ARM64**, modeled on [cmux](https://
 | PowerShell 7 (or Windows PowerShell) and cmd through ConPTY, with 24-bit color, scrollback, selection, copy and paste | Done |
 | OSC 9 / 99 / 777 notifications: pane ring, tab dot, workspace badge, notification panel, Windows toast when armux is in the background | Done |
 | `armux` CLI: `notify`, `send`, `open`, `list`, `ping` over a per-user named pipe | Done |
-| Vertical sidebar: workspace title, latest notification, git branch · directory (follows `cd`), ports, PR, unread badge | Done |
+| Vertical sidebar: workspace title, live status with a dot (working, needs input, idle, latest notification), git branch · directory (follows `cd`), ports, PR, unread badge | Done |
 | Workspace colors (17 presets or custom) shown as a left rail or underline; pinned workspaces | Done |
 | Per-pane tab bars, split right / down, drag to resize, zoom, equalize | Done |
 | Built-in browser (WebView2): address bar with search, back, forward, reload; lazy, suspended when hidden, at most 2 live, released when closed | Done |
 | File explorer beside the sidebar (`Ctrl+Shift+E`), modeled on Warp's file tree | Done (hidden by default) |
 | Command palette (`Ctrl+Shift+P`) with inline shortcuts and workspace switching | Done |
 | Keyboard switching: `Ctrl+1`–`9` and `Ctrl+PageUp`/`PageDown` for workspaces, `F6` and `Ctrl+Alt+arrows` for panes | Done |
-| Zed's fonts bundled: Lilex in terminals, IBM Plex Sans in the interface; shell, start directory, fonts and size in Settings (`Ctrl+Shift+,`); `Ctrl+=` / `Ctrl+-` / `Ctrl+0` and Ctrl+wheel resize terminal text | Done |
+| Zed's fonts bundled: Lilex in terminals, IBM Plex Sans in the interface; shell, start directory, fonts and size in Settings (`Ctrl+Shift+,`); `Ctrl+=` / `Ctrl+-` / `Ctrl+0` and Ctrl+wheel zoom the whole window, `Ctrl+Shift+=` / `-` / `0` the terminal text | Done |
 | Taskbar status of the current workspace while you're tabbed out: accent bar while Claude Code (or any OSC 9;4 program) works, yellow when it needs you, red on error | Done |
 | Prompt editor (`Ctrl+G`): a normal text box under the terminal for writing long prompts, sent in one paste | Done |
 | Mouse: copy on select, Shift+drag selection in mouse-aware programs, wheel and clicks passed to programs like Claude Code and vim, drag files from the explorer or Windows Explorer to type their relative path | Done |

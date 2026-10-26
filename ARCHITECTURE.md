@@ -300,7 +300,8 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | Toggle unread | ⌥⌘U | Ctrl+Alt+U |
 | Clear scrollback | ⌘K | Ctrl+Shift+K |
 | New window | ⌘⇧N | Ctrl+Alt+Shift+N |
-| Font size bigger / smaller / reset | ⌘+ / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 * (requested; Windows Terminal's keys), also Ctrl+Shift+= / - / 0 and Ctrl+wheel |
+| Zoom the window in / out / reset | — | Ctrl+= / Ctrl+- / Ctrl+0 and Ctrl+wheel * (D-27) |
+| Terminal font size bigger / smaller / reset | ⌘+ / ⌘- / ⌘0 | Ctrl+Shift+= / Ctrl+Shift+- / Ctrl+Shift+0 |
 | Prompt editor | — (Warp: Ctrl+G) | Ctrl+G * (D-23); Claude Code's own Ctrl+G (external editor) no longer reaches it |
 | Settings | ⌘, | Ctrl+Shift+, |
 | Copy / paste | ⌘C / ⌘V | Ctrl+Shift+C / Ctrl+Shift+V, also Shift+Insert and the right-click menu |
@@ -337,6 +338,8 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | D-24 | (macOS dock badge) | Taskbar status for the current workspace only (ITaskbarList3): a full bar in the accent color while a program works, yellow when a tab needs input (unread notification or bell), red on OSC 9;4 error | Maintainer request (2026-10-26). "Working" comes from OSC 9;4 or Claude Code's title spinner (◐◓◑◒): Claude Code sends OSC 9;4 only to ConEmu, Ghostty and iTerm. The indeterminate marquee was tried and rejected: Windows 11 draws it as a faint dot. A notification while armux is in the background stays unread until you return. |
 | D-25 | Mouse handled by Ghostty | Programs that turn on mouse tracking (1000/1002/1003, SGR 1006) get clicks, drags and the wheel; Shift+drag still selects. Selections copy on release (setting). Files dragged from the explorer or Windows Explorer type their path, relative to the terminal's directory and quoted for the shell. | Claude Code turns tracking on; without it, the wheel scrolled prompt history. Copy on select and drag-to-type are maintainer requests (Warp behavior). |
 | D-26 | (cmux has one window per socket) | Each armux window serves its own pipe, `armux-<user>-<pid>`; terminals get `ARMUX_PIPE`, and the CLI outside armux uses the first window it finds | Two windows used to answer on one pipe name. |
+| D-27 | ⌘+ / ⌘- change the font size | Ctrl+= / Ctrl+- / Ctrl+0 (and Ctrl+wheel) zoom the whole window in 10% steps from 70% to 200%, saved in Settings; the terminal font size alone moved to Ctrl+Shift | Maintainer request (2026-10-26). WinUI has no layout scale, so the content is laid out at window size ÷ zoom inside a `Viewbox`. Menus, flyouts and dialogs are popups outside it and stay at 100%. |
+| D-28 | Status line from the agent's notifications | For workspaces with live terminals, the status line and a dot follow the terminals: an unread notification (amber), `Working · <program>` (green), an OSC 9;4 error (red), else the latest notification or `Idle · <program>` (gray). Rows are taller (64 px minimum). | Maintainer request (2026-10-26): cmux shows each workspace's state. |
 
 ## 10. Dependency register
 
