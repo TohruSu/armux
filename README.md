@@ -28,7 +28,10 @@ A terminal workspace app for **Windows 11 on ARM64**, modeled on [cmux](https://
 | File explorer beside the sidebar (`Ctrl+Shift+E`), modeled on Warp's file tree | Done (hidden by default) |
 | Command palette (`Ctrl+Shift+P`) with inline shortcuts and workspace switching | Done |
 | Keyboard switching: `Ctrl+1`–`9` and `Ctrl+PageUp`/`PageDown` for workspaces, `F6` and `Ctrl+Alt+arrows` for panes | Done |
-| Terminal font: Lilex (Zed's default) bundled; shell, fonts and size in Settings (`Ctrl+Shift+,`) | Done |
+| Zed's fonts bundled: Lilex in terminals, IBM Plex Sans in the interface; shell, start directory, fonts and size in Settings (`Ctrl+Shift+,`); `Ctrl+=` / `Ctrl+-` / `Ctrl+0` and Ctrl+wheel resize terminal text | Done |
+| Taskbar status of the current workspace while you're tabbed out: accent bar while Claude Code (or any OSC 9;4 program) works, yellow when it needs you, red on error | Done |
+| Prompt editor (`Ctrl+G`): a normal text box under the terminal for writing long prompts, sent in one paste | Done |
+| Mouse: copy on select, Shift+drag selection in mouse-aware programs, wheel and clicks passed to programs like Claude Code and vim, drag files from the explorer or Windows Explorer to type their relative path | Done |
 | Dark and light themes | Done |
 | WSL | Not planned for now: a WSL VM costs far more memory than armux |
 
@@ -85,4 +88,4 @@ Contributions are welcome, especially from people on Windows on ARM hardware. St
 
 ## License
 
-[MIT](LICENSE). The bundled [Lilex](https://github.com/mishamyrt/Lilex) font is under the SIL Open Font License 1.1 ([`OFL.txt`](src/Armux.App/Assets/Fonts/OFL.txt)).
+[MIT](LICENSE). The bundled fonts are under the SIL Open Font License 1.1: [Lilex](https://github.com/mishamyrt/Lilex) ([`OFL-Lilex.txt`](src/Armux.App/Assets/Fonts/OFL-Lilex.txt)) and [IBM Plex Sans](https://github.com/IBM/plex) ([`OFL-IBMPlexSans.txt`](src/Armux.App/Assets/Fonts/OFL-IBMPlexSans.txt)).

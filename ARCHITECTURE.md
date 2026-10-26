@@ -300,7 +300,8 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | Toggle unread | ⌥⌘U | Ctrl+Alt+U |
 | Clear scrollback | ⌘K | Ctrl+Shift+K |
 | New window | ⌘⇧N | Ctrl+Alt+Shift+N |
-| Font size bigger / smaller / reset | ⌘+ / ⌘- / ⌘0 | Ctrl+Shift+= / Ctrl+Shift+- / Ctrl+Shift+0 |
+| Font size bigger / smaller / reset | ⌘+ / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 * (requested; Windows Terminal's keys), also Ctrl+Shift+= / - / 0 and Ctrl+wheel |
+| Prompt editor | — (Warp: Ctrl+G) | Ctrl+G * (D-23); Claude Code's own Ctrl+G (external editor) no longer reaches it |
 | Settings | ⌘, | Ctrl+Shift+, |
 | Copy / paste | ⌘C / ⌘V | Ctrl+Shift+C / Ctrl+Shift+V, also Shift+Insert and the right-click menu |
 | Find | ⌘F | Later |
@@ -315,10 +316,10 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | D-03 | Browser shortcuts follow Safari defaults | Will follow Edge defaults | Same principle: follow the platform browser. |
 | D-04 | macOS notification center | Windows toast notifications (App SDK `AppNotificationManager`), shown only while armux is in the background and registered on first use | Platform API. Registering lazily keeps the notification stack out of sessions that never notify. |
 | D-05 | `CMUX_*` environment variables | `ARMUX_*` | Avoid confusing tools that detect cmux. |
-| D-06 | Unix socket API | Named pipe `\\.\pipe\armux-<user>`, opened with `PipeOptions.CurrentUserOnly`; one JSON request and response line per connection | Windows-native IPC. Other users on the machine cannot connect. |
+| D-06 | Unix socket API | Named pipe `\\.\pipe\armux-<user>-<pid>` (D-26), opened with `PipeOptions.CurrentUserOnly`; one JSON request and response line per connection | Windows-native IPC. Other users on the machine cannot connect. |
 | D-07 | Reads Ghostty config for themes | Own dark and light tokens (`Theme.cs`) | Ghostty has no Windows build. |
 | D-08 | macOS traffic-light window buttons on the left | Windows caption buttons on the right | Maintainer request: macOS-only chrome is replaced by Windows chrome. |
-| D-09 | SF Pro | Segoe UI Variable (Windows 11 system font) for the interface | Maintainer request; SF Pro is not licensed for Windows apps. Terminal font: D-15. |
+| D-09 | SF Pro | IBM Plex Sans (Zed's interface font, ".ZedSans"), bundled, for the interface and built-in controls; Segoe UI Variable as fallback | Maintainer request (2026-10-25: Windows font; 2026-10-26: Zed's font, to match Lilex). SF Pro is not licensed for Windows apps. Terminal font: D-15. |
 | D-10 | Color presets in the right-click menu | Right-click menu opens a 17-swatch flyout | A swatch grid is quicker to scan than 17 text items in a Windows menu. |
 | D-11 | App and CLI both named `cmux` | App `ArmuxApp.exe`; `armux.exe` is reserved for the CLI | Windows file names are case-insensitive, so the app and CLI need different names in one folder. |
 | D-12 | Selected workspace is a blue block with white text | Gray block (lighter than hover) with normal text colors; the unread badge stays blue | Maintainer request (2026-10-26): on blue, the workspace color rail was hard to see. |
@@ -327,11 +328,15 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | D-15 | Terminal font from the Ghostty config | Lilex, Zed's default font since 2025, is bundled and the default; any installed font can be chosen | Maintainer request (2026-10-26). |
 | D-16 | Native macOS settings window | `ContentDialog` with terminal font, size (− / + stepper) and interface font, saved to `%LOCALAPPDATA%\armux\settings.json` (`ARMUX_SETTINGS_FILE` overrides the path) | WinUI's `NumberBox` crashes NativeAOT builds (missing `TabViewScrollButtonBackground` resource), so the size uses buttons. |
 | D-17 | Warp opens files in its code editor | Read-only `FileView` tab in the terminal font: first 256 KB; binary files get an "Open with default app" button | armux has no editor; building one is out of scope. |
-| D-18 | Ghostty terminal core, GPU rendered | Own emulator in `Armux.Core.Vt` (VT500 parser, xterm subset that ConPTY emits and full-screen programs use, packed scrollback, reflow on resize), drawn as one XAML TextBlock per row with background rectangles | Ghostty has no Windows library. No dependency was needed, and XAML text keeps memory low (see section 7). Known gaps: no mouse reporting, no OSC 8 links, no combining marks, and wide characters rely on the font's glyph widths. |
-| D-19 | Shell integration scripts | PowerShell: a prompt wrapper passed with `-EncodedCommand` after the profile loads, emitting OSC 7. cmd: `PROMPT` prefixed with an OSC 7 code. | Lets the sidebar, git branch and explorer follow `cd`. The user's own prompt is kept. |
+| D-18 | Ghostty terminal core, GPU rendered | Own emulator in `Armux.Core.Vt` (VT500 parser, xterm subset that ConPTY emits and full-screen programs use, packed scrollback, reflow on resize), drawn as one XAML TextBlock per row with background rectangles | Ghostty has no Windows library. No dependency was needed, and XAML text keeps memory low (see section 7). Mouse reporting: D-25. Known gaps: no OSC 8 links, no combining marks, and wide characters rely on the font's glyph widths. |
+| D-19 | Shell integration scripts | PowerShell: a prompt wrapper passed with `-EncodedCommand` after the profile loads, emitting OSC 7, plus `LocationChangedAction` (PowerShell 7.1+) so a `cd` inside a longer command line, such as `cd x; claude`, reports at once. cmd: `PROMPT` prefixed with an OSC 7 code. | Lets the sidebar, git branch and explorer follow `cd`. The user's own prompt is kept. |
 | D-20 | `cmux` CLI with many commands | `armux notify`, `send`, `open`, `list`, `ping`; the target tab comes from `ARMUX_SURFACE_ID`, which every armux terminal sets, and `armux.exe` is on each shell's PATH | The commands an agent needs first. More can follow on the same pipe. |
 | D-21 | (macOS) | No WSL profile | Maintainer decision (2026-10-26): a WSL VM costs far more memory than the app. PowerShell and cmd only. |
 | D-22 | Ghostty font features | Lilex ligatures are on, so `->` and `----` render as ligatures in the terminal | Zed shows the same. A setting to turn them off can come later. |
+| D-23 | (none) | Prompt editor (Ctrl+G, Warp's input editor): a multi-line text box under the terminal with mouse selection, undo and spell check. Ctrl+Enter pastes the text and presses Enter; Shift+Enter or Insert pastes without Enter. Each terminal keeps its draft. | Maintainer request (2026-10-26): easier prompting. Text goes in as one bracketed paste, so newlines do not submit early. |
+| D-24 | (macOS dock badge) | Taskbar status for the current workspace only (ITaskbarList3): a full bar in the accent color while a program works, yellow when a tab needs input (unread notification or bell), red on OSC 9;4 error | Maintainer request (2026-10-26). "Working" comes from OSC 9;4 or Claude Code's title spinner (◐◓◑◒): Claude Code sends OSC 9;4 only to ConEmu, Ghostty and iTerm. The indeterminate marquee was tried and rejected: Windows 11 draws it as a faint dot. A notification while armux is in the background stays unread until you return. |
+| D-25 | Mouse handled by Ghostty | Programs that turn on mouse tracking (1000/1002/1003, SGR 1006) get clicks, drags and the wheel; Shift+drag still selects. Selections copy on release (setting). Files dragged from the explorer or Windows Explorer type their path, relative to the terminal's directory and quoted for the shell. | Claude Code turns tracking on; without it, the wheel scrolled prompt history. Copy on select and drag-to-type are maintainer requests (Warp behavior). |
+| D-26 | (cmux has one window per socket) | Each armux window serves its own pipe, `armux-<user>-<pid>`; terminals get `ARMUX_PIPE`, and the CLI outside armux uses the first window it finds | Two windows used to answer on one pipe name. |
 
 ## 10. Dependency register
 
@@ -342,7 +347,8 @@ Allowed licenses, direct and transitive: MIT, Apache-2.0, BSD (any clause count)
 | Microsoft.WindowsAppSDK 1.8.260921001 | App | Microsoft Software License Terms (approved platform SDK) | WinUI 3, windowing, title bar |
 | Microsoft.Web.WebView2 (transitive) | App | BSD-3-Clause | Browser panel |
 | Microsoft.Windows.SDK.BuildTools (transitive) | Build only | Microsoft Software License Terms | WinRT projections at build time |
-| Lilex 2.630 (`Lilex[wght].ttf`, shipped as `Assets/Fonts/Lilex-VF.ttf`) | App | SIL OFL-1.1 (approved for fonts); `OFL.txt` ships beside it | Default terminal font |
+| Lilex 2.630 (`Lilex[wght].ttf`, shipped as `Assets/Fonts/Lilex-VF.ttf`) | App | SIL OFL-1.1 (approved for fonts); `OFL-Lilex.txt` ships beside it | Default terminal font |
+| IBM Plex Sans 1.1.0 (Regular and SemiBold `.ttf`) | App | SIL OFL-1.1 (approved for fonts), reserved font name "Plex", shipped unmodified; `OFL-IBMPlexSans.txt` ships beside it | Default interface font (Zed's) |
 | MSTest.Sdk 4.0.2 | Tests only | MIT | Unit tests |
 | `actions/checkout@v7`, `actions/cache@v6`, `actions/upload-artifact@v7`, `actions/setup-dotnet@v6` | CI | MIT | Check out, cache NuGet, install .NET, publish the build |
 
