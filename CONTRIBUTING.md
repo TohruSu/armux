@@ -36,12 +36,15 @@ src\Armux.App\bin\ARM64\Release\net10.0-windows10.0.26100.0\win-arm64\ArmuxApp.e
 # Release build (NativeAOT), the one memory numbers are reported for:
 $env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
 dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publish
-pwsh scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe
+dotnet publish src/Armux.Cli -c Release -r win-arm64 -o publish
+pwsh scripts/check-pe-arm64.ps1 publish/ArmuxApp.exe publish/armux.exe
 ```
 
-Useful launch flags for UI work: `--scenario demo|idle|panes|browser`, `--panes N`, `--theme light`, `--palette`, `--notifications`, `--zoom`, `--select N`, `--explorer`, `--settings` (see `src/Armux.App/LaunchOptions.cs`). Set `ARMUX_SETTINGS_FILE` to a scratch path so screenshots and measurements use default fonts, not your own settings. `scripts/screenshot.ps1` captures the window, and `scripts/bench.ps1` measures start-up and memory.
+Useful launch flags for UI work: `--scenario live|demo|idle|panes|browser` (`live`, the default, starts real shells; the others use mock terminals), `--panes N`, `--theme light`, `--palette`, `--notifications`, `--zoom`, `--select N`, `--explorer`, `--settings` (see `src/Armux.App/LaunchOptions.cs`). Set `ARMUX_SETTINGS_FILE` to a scratch path so screenshots and measurements use default fonts, not your own settings. `scripts/screenshot.ps1` captures the window, and `scripts/bench.ps1` measures start-up and memory.
 
 `screenshot.ps1 -Keys` and `-Clicks` send real input. They check that armux is the foreground window before each key or click and stop otherwise, but run them only when you are not using the machine. For repeated actions, prefer UI Automation (icon buttons carry automation names), which sends no input to other windows.
+
+To drive live terminals in tests, use the CLI instead of keystrokes: `armux send --surface N "command\n"` types into tab N, and `armux list` shows the ids. To debug rendering, set `ARMUX_PTY_LOG` to a file path before starting armux; it records the raw ConPTY output and every resize.
 
 ### Common ARM64 traps
 

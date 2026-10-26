@@ -4,35 +4,49 @@ A terminal workspace app for **Windows 11 on ARM64**, modeled on [cmux](https://
 
 [![ci](https://github.com/apaslam09/armux/actions/workflows/ci.yml/badge.svg)](https://github.com/apaslam09/armux/actions/workflows/ci.yml)
 
-> **Status: Phase 2 (UI on mock data).** The full cmux-style interface runs, but terminals show mock text. Real shells (PowerShell, cmd, WSL through ConPTY), OSC notifications and the `armux` CLI arrive in Phase 3. See the [roadmap](ARCHITECTURE.md#roadmap).
+> **Status: Phase 3 (real shells), in review.** PowerShell and cmd run through ConPTY in armux's own terminal emulator; OSC 9 / 99 / 777 light up notification rings and Windows toasts; the browser loads real pages; the `armux` CLI talks to the app. See the [roadmap](ARCHITECTURE.md#roadmap).
 
-![armux demo, dark theme](docs/screenshots/01-demo-dark.png)
+![armux with two PowerShell panes, the file explorer and a notification ring](docs/screenshots/13-live-shells.png)
 
 ## Why
 
-- **Native ARM64.** Built with WinUI 3 and published as NativeAOT for `win-arm64`. CI checks the release binary has PE machine type `0xAA64`, so it never runs under x64 emulation.
+- **Native ARM64.** Built with WinUI 3 and published as NativeAOT for `win-arm64`. CI checks both binaries have PE machine type `0xAA64`, so nothing runs under x64 emulation.
 - **cmux's UI and model.** The same Window > Workspace > Pane > Surface hierarchy, workspace colors, notification rings, command palette and a shortcut layout mapped to Windows. Every UI element traces to a cmux feature ([traceability table](ARCHITECTURE.md#5-feature-traceability)).
-- **Measured memory.** Idle on a Surface Laptop 7: about 95 MB working set, 47 MB private and 25 MB in Task Manager, starting in 156–250 ms depending on machine state. Numbers for every scenario, including the browser panel, are in [ARCHITECTURE.md](ARCHITECTURE.md#7-memory-budget), with the scripts to reproduce them.
+- **Measured memory.** With one PowerShell pane on a Surface Laptop 7, armux and its ConPTY host use about 107 MB working set, 49 MB private and 27 MB in Task Manager; each extra pane adds about 13 / 4 / 3.5 MB. The shell itself is counted separately (pwsh about 26 MB private, cmd about 6). Every scenario, and the scripts to reproduce it, is in [ARCHITECTURE.md](ARCHITECTURE.md#7-memory-budget).
 
 ## Features
 
 | Feature | Status |
 |---|---|
-| Vertical sidebar: workspace title, latest notification, branch · directory, ports, PR, unread badge | Done (mock data) |
+| PowerShell 7 (or Windows PowerShell) and cmd through ConPTY, with 24-bit color, scrollback, selection, copy and paste | Done |
+| OSC 9 / 99 / 777 notifications: pane ring, tab dot, workspace badge, notification panel, Windows toast when armux is in the background | Done |
+| `armux` CLI: `notify`, `send`, `open`, `list`, `ping` over a per-user named pipe | Done |
+| Vertical sidebar: workspace title, latest notification, git branch · directory (follows `cd`), ports, PR, unread badge | Done |
 | Workspace colors (17 presets or custom) shown as a left rail or underline; pinned workspaces | Done |
 | Per-pane tab bars, split right / down, drag to resize, zoom, equalize | Done |
+| Built-in browser (WebView2): address bar with search, back, forward, reload; lazy, suspended when hidden, at most 2 live, released when closed | Done |
+| File explorer beside the sidebar (`Ctrl+Shift+E`), modeled on Warp's file tree | Done (hidden by default) |
 | Command palette (`Ctrl+Shift+P`) with inline shortcuts and workspace switching | Done |
-| Notification rings, tab dots, bell with unread count, notification panel, jump to latest unread | Done (simulated notifications) |
-| Built-in browser panel (WebView2): lazy, suspended when hidden, at most 2 live, fully released when closed | Done (mock page) |
-| File explorer beside the sidebar (`Ctrl+Shift+E`), modeled on Warp's file tree: open files as read-only tabs or panes, copy paths, new file, reveal in File Explorer | Done (hidden by default) |
 | Keyboard switching: `Ctrl+1`–`9` and `Ctrl+PageUp`/`PageDown` for workspaces, `F6` and `Ctrl+Alt+arrows` for panes | Done |
-| Terminal font: Lilex (Zed's default) bundled; any installed font and size in Settings (`Ctrl+Shift+,`) | Done |
+| Terminal font: Lilex (Zed's default) bundled; shell, fonts and size in Settings (`Ctrl+Shift+,`) | Done |
 | Dark and light themes | Done |
-| PowerShell 7, cmd and WSL through ConPTY | Phase 3 |
-| OSC 9 / 99 / 777 notification detection, Windows toasts | Phase 3 |
-| `armux notify` CLI and named-pipe API | Phase 3 |
+| WSL | Not planned for now: a WSL VM costs far more memory than armux |
 
-More screenshots: [command palette](docs/screenshots/02-command-palette.png), [notifications](docs/screenshots/03-notifications.png), [workspace colors](docs/screenshots/05-workspace-colors.png), [zoomed pane](docs/screenshots/06-zoomed-pane.png), [light theme](docs/screenshots/07-light-theme.png), [four-pane grid](docs/screenshots/08-four-pane-grid.png), [file explorer](docs/screenshots/11-file-explorer.png), [settings](docs/screenshots/12-settings.png).
+More screenshots: [browser and CLI](docs/screenshots/14-browser-and-cli.png), [command palette](docs/screenshots/02-command-palette.png), [notifications](docs/screenshots/03-notifications.png), [workspace colors](docs/screenshots/05-workspace-colors.png), [zoomed pane](docs/screenshots/06-zoomed-pane.png), [light theme](docs/screenshots/07-light-theme.png), [four-pane grid](docs/screenshots/08-four-pane-grid.png), [file explorer](docs/screenshots/11-file-explorer.png), [settings](docs/screenshots/12-settings.png).
+
+## The `armux` CLI
+
+`armux.exe` ships next to `ArmuxApp.exe` and is on the PATH of every armux terminal, which also sets `ARMUX_SURFACE_ID` so commands act on the calling tab:
+
+```powershell
+armux notify "Tests finished: 24 passed"          # ring + badge on this tab, a toast if armux is in the background
+armux notify --title "Claude Code" --body "Waiting for your input"
+armux open http://localhost:3000                  # browser split beside this terminal
+armux send --surface 2 "npm test\n"               # type into another tab
+armux list                                        # workspaces and tabs with their ids
+```
+
+Programs can also notify without the CLI by printing OSC 9 (`ESC ] 9 ; text BEL`), OSC 777 (`ESC ] 777 ; notify ; title ; body BEL`) or OSC 99 (kitty).
 
 ## Requirements
 
@@ -48,6 +62,7 @@ git clone https://github.com/apaslam09/armux
 cd armux
 dotnet test --project tests/Armux.Core.Tests
 dotnet publish src/Armux.App -c Release -r win-arm64 -p:Platform=ARM64 -o publish
+dotnet publish src/Armux.Cli -c Release -r win-arm64 -o publish
 publish\ArmuxApp.exe
 ```
 
@@ -55,7 +70,7 @@ publish\ArmuxApp.exe
 
 ```powershell
 ./scripts/measure-memory.ps1 -Name ArmuxApp
-./scripts/bench.ps1 -Exe publish/ArmuxApp.exe -ArgumentList '--scenario','idle'
+./scripts/bench.ps1 -Exe publish/ArmuxApp.exe -ArgumentList '--scenario','live','--panes','4'
 ```
 
 `measure-memory.ps1` sums working set, private bytes and Task Manager memory across the app and every process it starts (WebView2, ConPTY hosts, shells), and reports app cost and shell cost separately. `bench.ps1` adds cold-start time.

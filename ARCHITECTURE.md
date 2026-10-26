@@ -1,6 +1,6 @@
 # armux architecture
 
-Status: **Phase 2 complete; review round 1 changes applied (2026-10-26), awaiting maintainer review.** The cmux-style UI runs on mock data, built with WinUI 3 and published as NativeAOT. Measurements are in section 7. Sections marked _Phase 3_ are plans. Nothing in this file claims a measured number unless it gives the method and date.
+Status: **Phase 3 complete (2026-10-26), awaiting maintainer review.** armux runs real PowerShell and cmd shells through ConPTY with its own terminal emulator, turns OSC 9/99/777 into notification rings and Windows toasts, browses real pages, and has an `armux` CLI. Built with WinUI 3 and published as NativeAOT. Measurements are in section 7. Nothing in this file claims a measured number unless it gives the method and date.
 
 ## 1. Scope
 
@@ -15,18 +15,19 @@ armux is a terminal workspace app for **Windows 11 on ARM64**. It follows the UI
 | Phase | Deliverable | Status |
 |---|---|---|
 | 1 | Repository, docs, CI on a native ARM64 runner | Done 2026-10-25 |
-| 2 | Full cmux-style UI on mock data, stack comparison, memory measurements | Done 2026-10-26, in review |
-| 3 | ConPTY shells (pwsh, cmd, WSL), terminal rendering, OSC 9/99/777 notifications, real browser navigation, `armux` CLI | Starts after approval |
+| 2 | Full cmux-style UI on mock data, stack comparison, memory measurements | Done 2026-10-26 |
+| 3 | ConPTY shells (pwsh, cmd), terminal emulation and rendering, OSC 9/99/777 notifications, real browser navigation, `armux` CLI. WSL dropped by the maintainer (D-21). | Done 2026-10-26, in review |
 
 ### Repository layout
 
 | Path | What |
 |---|---|
-| `src/Armux.Core` | UI-free model: workspaces, split tree, notifications, palette search, mock data. Unit-tested. |
+| `src/Armux.Core` | UI-free model: workspaces, split tree, notifications, palette search, settings, file tree, the terminal emulator (`Vt/`), ConPTY sessions (`Pty/`) and the pipe protocol (`Ipc.cs`). Unit-tested. |
 | `src/Armux.App` | WinUI 3 app (`ArmuxApp.exe`). Views are built in C#; only `App.xaml` is XAML. |
-| `tests/Armux.Core.Tests` | MSTest tests for the core. |
+| `src/Armux.Cli` | The `armux` CLI (`armux.exe`), NativeAOT, no dependencies beyond Core. |
+| `tests/Armux.Core.Tests` | MSTest tests for the core, including a live ConPTY round trip. |
 | `scripts/` | `measure-memory.ps1`, `bench.ps1`, `screenshot.ps1`, `check-pe-arm64.ps1` |
-| `docs/screenshots/` | Phase 2 screenshots (mock data only) |
+| `docs/screenshots/` | Screenshots: 01–12 on mock data, 13–14 from live shells |
 
 ## 2. Prior art and positioning
 
@@ -78,7 +79,9 @@ Every UI element traces to a cmux feature. Windows deviations link to section 9.
 | Pin a workspace to the top (changelog 0.61.0) | Pin from the context menu, pin glyph on the row | Done | 01 | — |
 | Per-pane tab bar of surfaces with new-terminal, new-browser, split-right and split-down buttons (screenshots) | `PaneView` tab bar | Done | 01 | — |
 | Split right / down, directional focus, resize, zoom, equalize (README, keyboard shortcuts) | Split tree, draggable 1 px dividers, zoom | Done | 06, 08, 10 | D-01 |
-| Built-in browser beside the terminal: address bar, back, forward, reload (README) | `BrowserPanel` on WebView2 | Done (mock page) | 01 | D-02, D-03 |
+| Built-in browser beside the terminal: address bar, back, forward, reload (README) | `BrowserPanel` on WebView2: real navigation, search from the address bar, page title on the tab; mock page only in the screenshot scenarios | Done | 01, 14 | D-02, D-03 |
+| Terminal: Ghostty-based emulator with GPU rendering (README) | `Armux.Core.Vt` emulator (parser, screen, scrollback, reflow) and `TerminalView` (XAML rows) on ConPTY | Done | 13, 14 | D-18 |
+| Shell integration: working directory and git branch in the sidebar (README) | OSC 7 from a wrapped PowerShell prompt or cmd `PROMPT`; branch read from `.git/HEAD` | Done | 13 | D-19 |
 | Command palette `⌘⇧P`, shortcuts shown inline, workspace switcher results, `⌃N`/`⌃P` (changelog 0.61.0, keyboard shortcuts) | `CommandPalette` | Done | 02, 10 | D-01 |
 | Blue notification ring on panes that need attention (README) | 2 px accent ring, plus blue dot on the tab | Done | 01, 09 | — |
 | Notification panel `⌘I`, jump to latest unread `⌘⇧U`, toggle unread, mark all read, clear (README) | Bell flyout with count, palette commands | Done | 03 | D-04 |
@@ -87,10 +90,11 @@ Every UI element traces to a cmux feature. Windows deviations link to section 9.
 | Clear scrollback, font size | Clear scrollback (mock); font size commands | Done | — | — |
 | Settings window `⌘,` (cmux settings) | Settings dialog: terminal font and size, interface font | Done (fonts only) | 12 | D-15, D-16 |
 | _Not in cmux:_ Warp's file tree (docs.warp.dev, "File Tree") | `ExplorerPanel` beside the sidebar, read-only `FileView` tabs | Done | 11 | D-13, D-17 |
-| Desktop notification when a process needs attention (README) | Windows toast | Phase 3 | — | D-04 |
-| OSC 9, OSC 99, OSC 777 detection (README) | OSC parser in the terminal pipeline | Phase 3 (Phase 2 has "Simulate Agent Notification") | — | — |
-| `cmux notify` CLI, socket API (README) | `armux notify`, named-pipe API | Phase 3 | — | D-06 |
-| Find, find in directory, session restore | — | Phase 3 or later | — | — |
+| Desktop notification when a process needs attention (README) | Windows toast while armux is in the background; clicking it jumps to the tab | Done (toast display not verified on screen) | — | D-04 |
+| OSC 9, OSC 99, OSC 777 detection (README) | `OscNotifications` (kitty chunks and base64 included; ConEmu `9;n` codes ignored) | Done | 13 | — |
+| `cmux notify` CLI, socket API (README) | `armux notify`, `send`, `open`, `list`, `ping` over a per-user named pipe | Done | 14 | D-06, D-20 |
+| Copy and paste (⌘C / ⌘V) | Mouse selection, Ctrl+Shift+C / Ctrl+Shift+V, Shift+Insert, right-click menu, bracketed paste | Done | — | — |
+| Find, find in directory, session restore, mouse reporting | — | Later | — | — |
 | SSH workspaces, Cloud workspaces, Claude Code Teams, browser import | — | Not planned | — | — |
 
 ### Comparison with cmux screenshots
@@ -223,7 +227,29 @@ Explorer findings:
 
 The open/close cycles were driven through UI Automation (`InvokePattern` on the explorer button), which sends no input to other windows.
 
-Not yet measured: the per-pane cost of a real terminal (ConPTY host + shell + renderer). That comes in Phase 3, and the per-pane target applies again then.
+### Phase 3 results (2026-10-26, NativeAOT, real shells)
+
+`--scenario live` (the default) starts the default shell from Settings in every pane; `ARMUX_SETTINGS_FILE` pointed at defaults (PowerShell 7.6, Lilex). App-attributable = ArmuxApp + one `conhost.exe` (ConPTY host) per pane. Shells are reported separately, as the method says.
+
+| Scenario | Working set | Private | Task Manager | Target |
+|---|---|---|---|---|
+| Idle: 1 live pwsh pane (4 runs) | 106.0–107.5 | 47.7–50.1 | 26.1–28.1 | **Met** (≤ 130 / ≤ 60 / ≤ 40) |
+| 2 / 4 / 8 live pwsh panes | 120.2 / 141.7 / 194.9 | 53.6 / 57.8 / 76.1 | 31.3 / 34.4 / 50.8 | — |
+| Per additional pane (1→8, average) | +12.7 | +4.0 | +3.5 | **Met** (≤ 20 / ≤ 8) |
+| One ConPTY host (`conhost.exe`) | 10.2 | 1.8 | 1.2 | part of the above |
+| cmd instead of pwsh: 1 / 4 panes | 106.6 / 139.9 | 48.5 / 58.2 | 26.4 / 34.5 | same as pwsh: the shell is not in this number |
+| After 80,000 lines of output (full 5,000-line scrollback) | 131.2 | 68.5 | 46.7 | reported |
+| Browser open / closed (65 s), mock page | 417.1 / 11.2 | 168.0 / 50.2 | 94.0 / 4.6 | closed **Met** (+8% over the mock idle 46.3) |
+| Demo (6 workspaces, mock) | 419.0 | 173.4 | 98.3 | reported |
+| Cold start to first frame, live, median of 10 | 272–284 ms | | | reported |
+
+Shells, not budgeted: one `pwsh.exe` 91.5 / 25.6 / 20.3, one `cmd.exe` 9.3 / 5.8 / 2.2. A whole one-pane tree is 199 / 76 / 48 with pwsh and 117 / 55 / 30 with cmd. For comparison, the maintainer's running Warp measured 203 / 478 / 44 (section 6).
+
+Notes:
+
+- The 80,000-line run was 20,000 PowerShell error messages. ArmuxApp used 6.8 s of CPU in total for it. Scrollback lines are stored packed (text plus attribute runs), not as cell arrays.
+- Rendering is idle when output is idle: a render is queued only when bytes arrive, and only changed rows are rebuilt.
+- Executables: `ArmuxApp.exe` 9.5 MB, `armux.exe` (CLI) 2.7 MB, both NativeAOT ARM64.
 
 ### Browser panel policy (implemented in `BrowserHost`)
 
@@ -259,7 +285,7 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | Jump to surface 1 to 8 / last | ⌃1–8 / ⌃9 | Alt+1–8 / Alt+9 * (Ctrl+digit sends legacy control codes) |
 | Split right / down | ⌘D / ⌘⇧D | Ctrl+Shift+D / Ctrl+Alt+Shift+D |
 | Focus pane | ⌥⌘ arrows | Ctrl+Alt+arrows |
-| Focus next / previous pane | — | F6 / Shift+F6 * (D-14) |
+| Focus next / previous pane | — | F6 / Shift+F6 * (D-14); programs in the terminal therefore never receive F6 |
 | File explorer | — (Warp: left panel ⌘\) | Ctrl+Shift+E * (D-13) |
 | Resize pane | ⌃⇧ H J K L | Alt+Shift+arrows * (Ctrl+Shift+K/L are taken by ⌘K/⌘L) |
 | Toggle pane zoom | ⌘⇧↩ | Ctrl+Alt+Shift+Enter |
@@ -268,7 +294,7 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | Command palette | ⌘⇧P | Ctrl+Shift+P |
 | Palette next / previous | ⌃N / ⌃P | Ctrl+N / Ctrl+P, or arrows |
 | Open browser in split | ⌘⇧L | Ctrl+Alt+Shift+L |
-| Browser: address bar, back, forward, reload, dev tools | ⌘L, ⌘[, ⌘], ⌘R, ⌥⌘I | Phase 3: Ctrl+L, Alt+Left, Alt+Right, F5, F12 * (D-03) |
+| Browser: address bar, back, forward, reload, dev tools | ⌘L, ⌘[, ⌘], ⌘R, ⌥⌘I | Ctrl+L (armux), Alt+Left, Alt+Right, F5, F12 (WebView2 built in) * (D-03) |
 | Notifications panel | ⌘I | Ctrl+Shift+I |
 | Jump to latest unread | ⌘⇧U | Ctrl+Alt+Shift+U |
 | Toggle unread | ⌥⌘U | Ctrl+Alt+U |
@@ -276,7 +302,8 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | New window | ⌘⇧N | Ctrl+Alt+Shift+N |
 | Font size bigger / smaller / reset | ⌘+ / ⌘- / ⌘0 | Ctrl+Shift+= / Ctrl+Shift+- / Ctrl+Shift+0 |
 | Settings | ⌘, | Ctrl+Shift+, |
-| Find, copy/paste | ⌘F, ⌘C/⌘V | Phase 3 |
+| Copy / paste | ⌘C / ⌘V | Ctrl+Shift+C / Ctrl+Shift+V, also Shift+Insert and the right-click menu |
+| Find | ⌘F | Later |
 | Quit | ⌘Q | Alt+F4 |
 
 ## 9. Windows deviations
@@ -286,9 +313,9 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | D-01 | ⌘-based shortcuts | Ctrl+Shift-based mapping (section 8) | No ⌘ key. Ctrl+letter belongs to the terminal. AltGr handling (Ctrl+Alt combos that type characters on some layouts) is a Phase 3 task with real terminal input. |
 | D-02 | WebKit web view | WebView2 (Chromium) | The system web engine on Windows. |
 | D-03 | Browser shortcuts follow Safari defaults | Will follow Edge defaults | Same principle: follow the platform browser. |
-| D-04 | macOS notification center | Windows toast notifications (Phase 3) | Platform API. |
+| D-04 | macOS notification center | Windows toast notifications (App SDK `AppNotificationManager`), shown only while armux is in the background and registered on first use | Platform API. Registering lazily keeps the notification stack out of sessions that never notify. |
 | D-05 | `CMUX_*` environment variables | `ARMUX_*` | Avoid confusing tools that detect cmux. |
-| D-06 | Unix socket API | Named pipe `\\.\pipe\armux-<user>` (Phase 3) | Windows-native IPC. |
+| D-06 | Unix socket API | Named pipe `\\.\pipe\armux-<user>`, opened with `PipeOptions.CurrentUserOnly`; one JSON request and response line per connection | Windows-native IPC. Other users on the machine cannot connect. |
 | D-07 | Reads Ghostty config for themes | Own dark and light tokens (`Theme.cs`) | Ghostty has no Windows build. |
 | D-08 | macOS traffic-light window buttons on the left | Windows caption buttons on the right | Maintainer request: macOS-only chrome is replaced by Windows chrome. |
 | D-09 | SF Pro | Segoe UI Variable (Windows 11 system font) for the interface | Maintainer request; SF Pro is not licensed for Windows apps. Terminal font: D-15. |
@@ -300,6 +327,11 @@ Exceptions are marked with *. Verified by injected key presses (`scripts/screens
 | D-15 | Terminal font from the Ghostty config | Lilex, Zed's default font since 2025, is bundled and the default; any installed font can be chosen | Maintainer request (2026-10-26). |
 | D-16 | Native macOS settings window | `ContentDialog` with terminal font, size (− / + stepper) and interface font, saved to `%LOCALAPPDATA%\armux\settings.json` (`ARMUX_SETTINGS_FILE` overrides the path) | WinUI's `NumberBox` crashes NativeAOT builds (missing `TabViewScrollButtonBackground` resource), so the size uses buttons. |
 | D-17 | Warp opens files in its code editor | Read-only `FileView` tab in the terminal font: first 256 KB; binary files get an "Open with default app" button | armux has no editor; building one is out of scope. |
+| D-18 | Ghostty terminal core, GPU rendered | Own emulator in `Armux.Core.Vt` (VT500 parser, xterm subset that ConPTY emits and full-screen programs use, packed scrollback, reflow on resize), drawn as one XAML TextBlock per row with background rectangles | Ghostty has no Windows library. No dependency was needed, and XAML text keeps memory low (see section 7). Known gaps: no mouse reporting, no OSC 8 links, no combining marks, and wide characters rely on the font's glyph widths. |
+| D-19 | Shell integration scripts | PowerShell: a prompt wrapper passed with `-EncodedCommand` after the profile loads, emitting OSC 7. cmd: `PROMPT` prefixed with an OSC 7 code. | Lets the sidebar, git branch and explorer follow `cd`. The user's own prompt is kept. |
+| D-20 | `cmux` CLI with many commands | `armux notify`, `send`, `open`, `list`, `ping`; the target tab comes from `ARMUX_SURFACE_ID`, which every armux terminal sets, and `armux.exe` is on each shell's PATH | The commands an agent needs first. More can follow on the same pipe. |
+| D-21 | (macOS) | No WSL profile | Maintainer decision (2026-10-26): a WSL VM costs far more memory than the app. PowerShell and cmd only. |
+| D-22 | Ghostty font features | Lilex ligatures are on, so `->` and `----` render as ligatures in the terminal | Zed shows the same. A setting to turn them off can come later. |
 
 ## 10. Dependency register
 
@@ -314,4 +346,4 @@ Allowed licenses, direct and transitive: MIT, Apache-2.0, BSD (any clause count)
 | MSTest.Sdk 4.0.2 | Tests only | MIT | Unit tests |
 | `actions/checkout@v7`, `actions/cache@v6`, `actions/upload-artifact@v7`, `actions/setup-dotnet@v6` | CI | MIT | Check out, cache NuGet, install .NET, publish the build |
 
-`Armux.Core` has no package dependencies. Third-party notices for WebView2 (BSD-3-Clause attribution) ship with the first release.
+Phase 3 added no dependencies: ConPTY, the named pipe, JSON (source generated) and toasts come from Windows, .NET and the approved Windows App SDK. `Armux.Core` and the `armux` CLI have no package dependencies. Third-party notices for WebView2 (BSD-3-Clause attribution) ship with the first release.
