@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Armux.App;
 
-/// <summary>Settings (cmux ⌘,): terminal font and size, and the UI font. Saved to %LOCALAPPDATA%\armux\settings.json.</summary>
+/// <summary>Settings (cmux ⌘,): shell for new terminals, terminal font and size, and the UI font. Saved to %LOCALAPPDATA%\armux\settings.json.</summary>
 public sealed partial class MainWindow
 {
     public static string SettingsPath =>
@@ -84,7 +84,13 @@ public sealed partial class MainWindow
         terminalFont.TextSubmitted += (_, _) => DispatcherQueue.TryEnqueue(Update);
         Update();
 
+        var shell = new ComboBox { Header = "Shell for new terminals", Width = 320 };
+        shell.Items.Add("PowerShell");
+        shell.Items.Add("Command Prompt");
+        shell.SelectedIndex = Theme.Settings.Shell == "cmd" ? 1 : 0;
+
         var body = new StackPanel { Spacing = 12, Width = 440 };
+        body.Children.Add(shell);
         body.Children.Add(terminalFont);
         body.Children.Add(showAll);
         body.Children.Add(sizeBox);
@@ -101,10 +107,17 @@ public sealed partial class MainWindow
             Fill(terminalFont, showAll.IsChecked == true ? FontList.All : FontList.Monospace, d.TerminalFont);
             Fill(uiFont, FontList.All, d.UiFont);
             size = d.TerminalFontSize;
+            shell.SelectedIndex = 0;
             Update();
         };
         if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
-        ApplySettings(new Settings { TerminalFont = Chosen(terminalFont), TerminalFontSize = size, UiFont = Chosen(uiFont) });
+        ApplySettings(new Settings
+        {
+            TerminalFont = Chosen(terminalFont),
+            TerminalFontSize = size,
+            UiFont = Chosen(uiFont),
+            Shell = shell.SelectedIndex == 1 ? "cmd" : "pwsh",
+        });
     }
 
     static ComboBox FontBox(string header) => new()

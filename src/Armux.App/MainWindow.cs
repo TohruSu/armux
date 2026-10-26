@@ -42,6 +42,10 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
     readonly Dictionary<Pane, PaneView> paneViews = [];
     readonly Dictionary<Surface, FrameworkElement> panels = [];
     bool sidebarVisible = true;
+    PipeServer? pipe;
+
+    /// <summary>True while this window is the foreground window; toasts are only shown when it is not.</summary>
+    public bool IsActiveWindow { get; private set; } = true;
 
     public MainWindow(LaunchOptions opts)
     {
@@ -65,6 +69,17 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
         RenderAll();
         root.Loaded += (_, _) => OnFirstLoad();
+
+        Activated += (_, e) => IsActiveWindow = e.WindowActivationState != WindowActivationState.Deactivated;
+        Toasts.Invoked += JumpToSurface;
+        pipe = new PipeServer(DispatcherQueue, HandleRequest);
+        pipe.Start();
+        Closed += (_, _) =>
+        {
+            pipe?.Dispose();
+            DisposeAllSessions();
+            Toasts.Unregister();
+        };
     }
 
     // ---- chrome ---------------------------------------------------------------------------
@@ -270,7 +285,15 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
     public bool IsFocused(Pane pane) => ReferenceEquals(state.Current?.Focused, pane);
 
-    void FocusKeys() => DispatcherQueue.TryEnqueue(() => keySink.Focus(FocusState.Programmatic));
+    /// <summary>Gives keyboard focus to the focused pane's terminal, or to the key sink when it has none.</summary>
+    void FocusKeys() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (FocusedTerminal() is { } t) t.Focus(FocusState.Programmatic);
+        else keySink.Focus(FocusState.Programmatic);
+    });
+
+    /// <summary>After a click or tab switch: focus the terminal, but leave focus alone for browser and file tabs.</summary>
+    void FocusTerminal() => DispatcherQueue.TryEnqueue(() => FocusedTerminal()?.Focus(FocusState.Programmatic));
 
     public void FocusPane(Pane pane)
     {
@@ -280,6 +303,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         if (pane.Selected is { } s) state.MarkRead(ws, s);
         if (old is not null && paneViews.TryGetValue(old, out var ov)) ov.Refresh();
         ViewOf(pane).Refresh();
+        FocusTerminal();
     }
 
     public void SelectSurface(Pane pane, Surface surface)
@@ -288,12 +312,15 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         FocusPane(pane);
         if (state.Current is { } ws) state.MarkRead(ws, surface);
         if (paneViews.TryGetValue(pane, out var v)) v.Refresh();
+        FocusTerminal();
     }
 
     public void CloseSurface(Pane pane, Surface surface)
     {
-        if (state.Current is not { } ws) return;
+        // The surface may be in a background workspace (a shell that exited there).
+        if ((Locate(surface)?.Ws ?? state.Current) is not { } ws) return;
         if (panels.Remove(surface, out var panel) && panel is BrowserPanel bp) browsers.Close(bp);
+        DisposeSession(surface);
         state.MarkRead(ws, surface);
         int at = pane.Surfaces.IndexOf(surface);
         pane.Surfaces.Remove(surface);
@@ -306,7 +333,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         if (Layout.Close(ws, pane))
         {
             if (paneViews.Remove(pane, out var v)) v.Detach();
-            RenderContent();
+            if (ReferenceEquals(ws, state.Current)) RenderContent();
         }
         else if (state.Workspaces.Count > 1) CloseWorkspace(ws);
         else NewSurface(pane, PanelKind.Terminal);
@@ -314,7 +341,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
     public void NewSurface(Pane pane, PanelKind kind)
     {
-        var s = kind == PanelKind.Browser ? MockData.Browser() : MockData.Terminal("pwsh");
+        var s = kind == PanelKind.Browser ? new Surface { Kind = PanelKind.Browser, Title = "New tab" } : LiveTerminal();
         pane.Surfaces.Add(s);
         SelectSurface(pane, s);
     }
@@ -322,7 +349,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
     public void SplitPane(Pane pane, SplitDirection direction)
     {
         if (state.Current is not { } ws) return;
-        Layout.Split(ws, pane, direction, MockData.Terminal("pwsh"));
+        Layout.Split(ws, pane, direction, LiveTerminal());
         RenderContent();
     }
 
@@ -333,7 +360,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
             {
                 PanelKind.Browser => new BrowserPanel(surface, browsers),
                 PanelKind.File => new FileView(surface),
-                _ => new TerminalView(surface),
+                _ => new TerminalView(SessionFor(surface)),
             };
         return p;
     }
@@ -350,7 +377,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
     void NewWorkspace()
     {
-        var ws = MockData.NewWorkspace($"workspace {state.Workspaces.Count + 1}", "", "main", "~", MockData.Terminal("pwsh"));
+        var ws = MockData.NewWorkspace($"workspace {state.Workspaces.Count + 1}", "", "", "~", LiveTerminal());
         state.Workspaces.Add(ws);
         SelectWorkspace(ws);
     }
@@ -362,7 +389,10 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         foreach (var pane in ws.Panes.ToList())
         {
             foreach (var s in pane.Surfaces)
+            {
                 if (panels.Remove(s, out var panel) && panel is BrowserPanel bp) browsers.Close(bp);
+                DisposeSession(s);
+            }
             if (paneViews.Remove(pane, out var v)) v.Detach();
         }
         foreach (var n in state.Notifications.Where(n => ReferenceEquals(n.Workspace, ws)).ToList()) state.Notifications.Remove(n);

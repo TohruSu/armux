@@ -57,6 +57,8 @@ public sealed partial class MainWindow
         // Surfaces
         Cmd("New Terminal Tab", "Ctrl+Shift+T", () => { if (Focused is { } p) NewSurface(p, PanelKind.Terminal); });
         Cmd("New Browser Tab", "", () => { if (Focused is { } p) NewSurface(p, PanelKind.Browser); });
+        Cmd("New PowerShell Tab", "", () => { if (Focused is { } p) { var s = LiveTerminal("pwsh"); p.Surfaces.Add(s); SelectSurface(p, s); } });
+        Cmd("New Command Prompt Tab", "", () => { if (Focused is { } p) { var s = LiveTerminal("cmd"); p.Surfaces.Add(s); SelectSurface(p, s); } });
         Cmd("Close Tab", "Ctrl+Shift+W", () => { if (Focused is { Selected: { } s } p) CloseSurface(p, s); });
         Cmd("Next Tab", "Ctrl+Tab", () => CycleSurface(1));
         Cmd("Previous Tab", "Ctrl+Shift+Tab", () => CycleSurface(-1));
@@ -82,7 +84,7 @@ public sealed partial class MainWindow
         Cmd("Open Browser in Split", "Ctrl+Alt+Shift+L", () =>
         {
             if (Ws is not { } w || Focused is not { } p) return;
-            Layout.Split(w, p, SplitDirection.Right, MockData.Browser());
+            Layout.Split(w, p, SplitDirection.Right, new Surface { Kind = PanelKind.Browser, Title = "New tab" });
             RenderContent();
         });
 
@@ -98,11 +100,16 @@ public sealed partial class MainWindow
         Cmd("Clear Scrollback", "Ctrl+Shift+K", () =>
         {
             if (Focused?.Selected is not { Kind: PanelKind.Terminal } s) return;
+            if (s.Live) { SessionFor(s).Terminal.ClearScrollback(); return; }
+            // Mock terminal: replace its canned output with a prompt and start it again.
             s.Lines.Clear();
             s.Lines.AddRange(MockData.Prompt());
+            DisposeSession(s);
             panels.Remove(s);
             ViewOf(Focused).Refresh();
         });
+        Cmd("Copy", "Ctrl+Shift+C", () => FocusedTerminal()?.Copy());
+        Cmd("Paste", "Ctrl+Shift+V", () => { if (FocusedTerminal() is { } t) _ = t.PasteAsync(); });
         Cmd("Settings…", "Ctrl+Shift+,", () => _ = OpenSettingsAsync());
         Cmd("Increase Font Size", "Ctrl+Shift+=", () => ChangeFontSize(1));
         Cmd("Decrease Font Size", "Ctrl+Shift+-", () => ChangeFontSize(-1));
@@ -157,6 +164,14 @@ public sealed partial class MainWindow
         if (palette.IsOpen) return;
         if (KeyName(e.Key) is not { } key) return;
         var chord = new Chord(Down(VirtualKey.Control), Down(VirtualKey.Menu), Down(VirtualKey.Shift), key);
+        // Ctrl+L belongs to the shell in a terminal, and focuses the address bar in a browser tab (Edge default, D-03).
+        if (chord == new Chord(true, false, false, "L") && Focused?.Selected is { Kind: PanelKind.Browser } b
+            && panels.TryGetValue(b, out var panel) && panel is BrowserPanel bp)
+        {
+            e.Handled = true;
+            bp.FocusAddress();
+            return;
+        }
         if (!keymap.TryGetValue(chord, out var run)) return;
         e.Handled = true;
         run();

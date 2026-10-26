@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Armux.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 
@@ -18,6 +19,7 @@ public sealed partial class BrowserPanel : Grid
     readonly Grid webHost = new();
     readonly TextBlock placeholder;
     readonly BrowserHost host;
+    readonly TextBox url;
 
     public BrowserPanel(Surface surface, BrowserHost host)
     {
@@ -34,9 +36,10 @@ public sealed partial class BrowserPanel : Grid
         var back = Ui.IconButton(Ui.Glyph(Ui.Back, 12, dim), "Back", () => { if (Web?.CanGoBack == true) Web.GoBack(); });
         var fwd = Ui.IconButton(Ui.Glyph(Ui.Forward, 12, dim), "Forward", () => { if (Web?.CanGoForward == true) Web.GoForward(); });
         var reload = Ui.IconButton(Ui.Glyph(Ui.Refresh, 12, dim), "Reload", () => Web?.Reload());
-        var url = new TextBox
+        url = new TextBox
         {
             Text = surface.Url,
+            PlaceholderText = "Search or enter address",
             FontFamily = new FontFamily(Theme.UiFont),
             FontSize = 12.5,
             Margin = new Thickness(6, 0, 0, 0),
@@ -48,10 +51,10 @@ public sealed partial class BrowserPanel : Grid
         url.KeyDown += (_, e) =>
         {
             if (e.Key != Windows.System.VirtualKey.Enter) return;
-            surface.Url = url.Text;
-            // Phase 2 shows a mock page; Phase 3 navigates for real.
-            Web?.NavigateToString(MockPage(surface.Url));
+            e.Handled = true;
+            Go(url.Text);
         };
+        url.GotFocus += (_, _) => url.SelectAll();
         SetColumn(fwd, 1); SetColumn(reload, 2); SetColumn(url, 3);
         bar.Children.Add(back); bar.Children.Add(fwd); bar.Children.Add(reload); bar.Children.Add(url);
         Children.Add(bar);
@@ -77,8 +80,45 @@ public sealed partial class BrowserPanel : Grid
         webHost.Children.Add(Web);
         await Web.EnsureCoreWebView2Async();
         placeholder.Visibility = Visibility.Collapsed;
-        Web.NavigateToString(MockPage(Surface.Url));
+        var core = Web.CoreWebView2;
+        core.SourceChanged += (_, _) =>
+        {
+            if (Surface.MockPage || core.Source.StartsWith("data:", StringComparison.Ordinal)) return;
+            Surface.Url = core.Source;
+            if (!ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), url)) url.Text = core.Source;
+        };
+        core.DocumentTitleChanged += (_, _) => { if (core.DocumentTitle.Length > 0) Surface.Title = core.DocumentTitle; };
+        // Links that open a new window load in this panel instead of a separate browser window.
+        core.NewWindowRequested += (_, e) => { e.Handled = true; core.Navigate(e.Uri); };
+        if (Surface.MockPage) Web.NavigateToString(MockPage(Surface.Url));
+        else if (Surface.Url.Length > 0) core.Navigate(Surface.Url);
+        else url.Focus(FocusState.Programmatic);
     }
+
+    /// <summary>Navigates to an address, or searches when the text does not look like one (Edge's default, D-03).</summary>
+    void Go(string input)
+    {
+        var target = AddressOrSearch(input);
+        if (target is null) return;
+        url.Text = target;
+        Surface.Url = target;
+        if (Web?.CoreWebView2 is { } core) core.Navigate(target);
+        Web?.Focus(FocusState.Programmatic);
+    }
+
+    public static string? AddressOrSearch(string input)
+    {
+        input = input.Trim();
+        if (input.Length == 0) return null;
+        if (Uri.TryCreate(input, UriKind.Absolute, out var abs) && abs.Scheme is "http" or "https" or "file") return abs.ToString();
+        bool local = input.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) || input.StartsWith("127.0.0.1", StringComparison.Ordinal);
+        if (local) return "http://" + input;
+        if (!input.Contains(' ') && input.Contains('.') && Uri.TryCreate("https://" + input, UriKind.Absolute, out var guess)) return guess.ToString();
+        return "https://www.bing.com/search?q=" + Uri.EscapeDataString(input);
+    }
+
+    /// <summary>Ctrl+L (Edge default): focus the address bar.</summary>
+    public void FocusAddress() => url.Focus(FocusState.Keyboard);
 
     internal void DestroyWeb(string reason)
     {
@@ -99,8 +139,8 @@ public sealed partial class BrowserPanel : Grid
         .ghost{background:transparent;border:1px solid #3a3a3a;color:#e8e8e8}
         </style></head><body><main>
         <h1>armux web</h1>
-        <p>Mock page served by the Phase 2 browser panel for <code>{{System.Net.WebUtility.HtmlEncode(url)}}</code>.
-        Real navigation arrives in Phase 3.</p>
+        <p>Mock page for <code>{{System.Net.WebUtility.HtmlEncode(url)}}</code>, used by the screenshot and
+        measurement scenarios. Browser tabs you open load real pages.</p>
         <div class="row"><span class="btn">Download for Windows on ARM</span><span class="btn ghost">View on GitHub</span></div>
         </main></body></html>
         """;
