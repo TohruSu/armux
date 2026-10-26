@@ -27,10 +27,17 @@ public sealed class Surface : Observable
     string url = "";
     public string Url { get => url; set => Set(ref url, value); }
 
+    /// <summary>A browser surface that shows a built-in mock page instead of loading <see cref="Url"/> (screenshots, measurements).</summary>
+    public bool MockPage { get; init; }
+
     /// <summary>Full path of the file shown by a <see cref="PanelKind.File"/> surface.</summary>
     public string FilePath { get; init; } = "";
 
-    /// <summary>Mock terminal output for Phase 2. Replaced by a real terminal buffer in Phase 3.</summary>
+    /// <summary>Shell of a live terminal ("pwsh" or "cmd"). Empty for a mock terminal, which shows <see cref="Lines"/>.</summary>
+    public string Shell { get; init; } = "";
+    public bool Live => Kind == PanelKind.Terminal && Shell.Length > 0;
+
+    /// <summary>Canned output of a mock terminal (screenshots and measurements).</summary>
     public List<TermLine> Lines { get; init; } = [];
 }
 

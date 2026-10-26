@@ -12,7 +12,7 @@ public static class MockData
         new() { Kind = PanelKind.Terminal, Title = title, Lines = lines?.ToList() ?? Prompt() };
 
     public static Surface Browser(string url = "http://localhost:3000/", string title = "armux dev server") =>
-        new() { Kind = PanelKind.Browser, Title = title, Url = url };
+        new() { Kind = PanelKind.Browser, Title = title, Url = url, MockPage = true };
 
     public static List<TermLine> Prompt() =>
     [

@@ -16,12 +16,15 @@ public sealed record Settings
     public string TerminalFont { get; set; } = DefaultTerminalFont;
     public double TerminalFontSize { get; set; } = DefaultTerminalFontSize;
     public string UiFont { get; set; } = DefaultUiFont;
+    /// <summary>Shell for new terminals: "pwsh" (PowerShell) or "cmd".</summary>
+    public string Shell { get; set; } = "pwsh";
 
     /// <summary>Blank names fall back to the defaults; sizes are clamped and rounded to half points.</summary>
     public Settings Normalized() => this with
     {
         TerminalFont = string.IsNullOrWhiteSpace(TerminalFont) ? DefaultTerminalFont : TerminalFont.Trim(),
         UiFont = string.IsNullOrWhiteSpace(UiFont) ? DefaultUiFont : UiFont.Trim(),
+        Shell = Pty.Shells.Name(Pty.Shells.Parse(Shell)),
         TerminalFontSize = double.IsFinite(TerminalFontSize)
             ? Math.Clamp(Math.Round(TerminalFontSize * 2) / 2, MinFontSize, MaxFontSize)
             : DefaultTerminalFontSize,
