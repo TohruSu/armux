@@ -24,6 +24,8 @@ public sealed class TerminalSession : IDisposable
     public Terminal Terminal { get; } = new(80, 24);
     public bool Started { get; private set; }
     public bool Exited { get; private set; }
+    /// <summary>A real shell, not a mock terminal replaying canned lines.</summary>
+    public bool Live => surface.Live;
     /// <summary>The shell's working directory (OSC 7), or the directory it started in.</summary>
     public string? Cwd { get; private set; }
     /// <summary>Working or idle, from OSC 9;4 progress and Claude Code's title (see <see cref="AgentStatus"/>).</summary>
@@ -38,6 +40,8 @@ public sealed class TerminalSession : IDisposable
     public event Action<int>? ProcessExited;
     /// <summary>Raised on the UI thread when <see cref="State"/> changes.</summary>
     public event Action? StateChanged;
+    /// <summary>Raised on the UI thread when the program sets a new title.</summary>
+    public event Action? TitleUpdated;
     /// <summary>Raised on the UI thread for BEL. Claude Code rings it when it needs input.</summary>
     public event Action? Bell;
 
@@ -53,6 +57,7 @@ public sealed class TerminalSession : IDisposable
             RawTitle = t;
             if (t.Length > 0) surface.Title = TabTitle(t);
             UpdateState();
+            TitleUpdated?.Invoke();
         });
         Terminal.ProgressChanged += () => ui.TryEnqueue(UpdateState);
         Terminal.Bell += () => ui.TryEnqueue(() => Bell?.Invoke());

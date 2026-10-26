@@ -87,7 +87,7 @@ public sealed partial class BrowserPanel : Grid
             Surface.Url = core.Source;
             if (!ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), url)) url.Text = core.Source;
         };
-        core.DocumentTitleChanged += (_, _) => { if (core.DocumentTitle.Length > 0) Surface.Title = core.DocumentTitle; };
+        core.DocumentTitleChanged += (_, _) => { if (!Surface.MockPage && core.DocumentTitle.Length > 0) Surface.Title = core.DocumentTitle; };
         // Links that open a new window load in this panel instead of a separate browser window.
         core.NewWindowRequested += (_, e) => { e.Handled = true; core.Navigate(e.Uri); };
         if (Surface.MockPage) Web.NavigateToString(MockPage(Surface.Url));

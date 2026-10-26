@@ -32,4 +32,37 @@ public static class AgentStatus
 
     /// <summary>The most urgent of the states.</summary>
     public static AgentState Max(IEnumerable<AgentState> states) => states.DefaultIfEmpty(AgentState.Idle).Max();
+
+    static readonly string[] Shells = ["pwsh", "powershell", "windows powershell", "cmd", "command prompt"];
+
+    /// <summary>
+    /// The program a tab title names, without Claude Code's status glyph ("◑ armux" → "armux"), or null for a
+    /// plain shell title ("pwsh", "C:\...\cmd.exe").
+    /// </summary>
+    public static string? ProgramName(string title)
+    {
+        title = title.Trim();
+        if (title.Length > 1 && !char.IsLetterOrDigit(title[0]) && title[1] == ' ') title = title[2..].Trim();
+        if (title.Length == 0) return null;
+        var bare = title.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? Path.GetFileNameWithoutExtension(title) : title;
+        return Shells.Contains(bare, StringComparer.OrdinalIgnoreCase) ? null : title;
+    }
+
+    /// <summary>
+    /// The sidebar status line of a workspace with live terminals (cmux shows the latest notification there):
+    /// an unread notification first, then what is working, then the latest notification, then the program that is
+    /// open, then "Idle".
+    /// </summary>
+    public static (string Text, AgentState Activity) Describe(
+        IReadOnlyList<(string Title, AgentState State)> tabs, string? unreadNotification, string? latestNotification)
+    {
+        if (unreadNotification is not null) return (unreadNotification, AgentState.NeedsInput);
+        var working = tabs.Where(t => t.State == AgentState.Working).ToList();
+        if (working.Count == 1) return ("Working · " + (ProgramName(working[0].Title) ?? "terminal"), AgentState.Working);
+        if (working.Count > 1) return ($"{working.Count} tabs working", AgentState.Working);
+        if (tabs.Any(t => t.State == AgentState.Error)) return ("Error reported", AgentState.Error);
+        if (latestNotification is not null) return (latestNotification, AgentState.Idle);
+        var program = tabs.Select(t => ProgramName(t.Title)).FirstOrDefault(n => n is not null);
+        return (program is null ? "Idle" : "Idle · " + program, AgentState.Idle);
+    }
 }

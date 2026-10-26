@@ -11,6 +11,7 @@ public sealed record Settings
     /// <summary>Zed's default interface font (".ZedSans"). armux bundles it (SIL OFL-1.1).</summary>
     public const string DefaultUiFont = "IBM Plex Sans";
     public const double DefaultTerminalFontSize = 13, MinFontSize = 8, MaxFontSize = 32;
+    public const double MinZoom = 0.7, MaxZoom = 2.0;
 
     // Settable, not init: the JSON source generator fills init-only properties missing from the file with
     // default values (0, null), which would turn a partial settings file into font size 0.
@@ -23,6 +24,8 @@ public sealed record Settings
     public string StartDirectory { get; set; } = "";
     /// <summary>Selecting text with the mouse copies it (Warp, Windows Terminal's copyOnSelect).</summary>
     public bool CopyOnSelect { get; set; } = true;
+    /// <summary>Scale of the whole window (Ctrl+= / Ctrl+- / Ctrl+0), in steps of 0.1.</summary>
+    public double Zoom { get; set; } = 1.0;
 
     /// <summary>Blank names fall back to the defaults; sizes are clamped and rounded to half points.</summary>
     public Settings Normalized() => this with
@@ -31,6 +34,7 @@ public sealed record Settings
         UiFont = string.IsNullOrWhiteSpace(UiFont) ? DefaultUiFont : UiFont.Trim(),
         Shell = Pty.Shells.Name(Pty.Shells.Parse(Shell)),
         StartDirectory = (StartDirectory ?? "").Trim().Trim('"'),
+        Zoom = double.IsFinite(Zoom) && Zoom > 0 ? Math.Clamp(Math.Round(Zoom * 10) / 10, MinZoom, MaxZoom) : 1.0,
         TerminalFontSize = double.IsFinite(TerminalFontSize)
             ? Math.Clamp(Math.Round(TerminalFontSize * 2) / 2, MinFontSize, MaxFontSize)
             : DefaultTerminalFontSize,

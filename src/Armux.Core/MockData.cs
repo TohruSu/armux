@@ -130,6 +130,7 @@ public static class MockData
 
         var docs = NewWorkspace("arm64 setup docs", "Running", "docs/devices", "~\\dev\\armux", Terminal("claude: docs", AgentSession("Document setup on Snapdragon X Elite")));
         docs.Color = "#F59E0B";
+        docs.Activity = AgentState.Working;
         state.Workspaces.Add(docs);
 
         var ci = NewWorkspace("ci job summary", "", "ci/summary", "~\\dev\\armux", Terminal("gh run watch", Tests()));
@@ -138,6 +139,7 @@ public static class MockData
 
         var web = NewWorkspace("landing page", "Running", "main", "~\\dev\\armux\\web", Terminal("npm run dev", DevServer()));
         web.Color = "#EC4899";
+        web.Activity = AgentState.Working;
         web.Ports = ":3000 :5173";
         state.Workspaces.Add(web);
 

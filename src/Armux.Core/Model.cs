@@ -111,6 +111,10 @@ public sealed class Workspace : Observable
     bool selected;
     public bool Selected { get => selected; set => Set(ref selected, value); }
 
+    AgentState activity;
+    /// <summary>What the workspace's terminals are doing, shown as a dot beside the status line.</summary>
+    public AgentState Activity { get => activity; set => Set(ref activity, value); }
+
     public PaneNode Root { get; set; } = new Pane();
     public Pane? Focused { get; set; }
     public Pane? Zoomed { get; set; }

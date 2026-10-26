@@ -61,6 +61,22 @@ public sealed class StatusAndMouseTests
     }
 
     [TestMethod]
+    public void WorkspaceStatusLine()
+    {
+        Assert.IsNull(AgentStatus.ProgramName("pwsh"));
+        Assert.IsNull(AgentStatus.ProgramName(@"C:\Windows\system32\cmd.exe"));
+        Assert.AreEqual("armux", AgentStatus.ProgramName("◑ armux"));
+        Assert.AreEqual("Claude Code", AgentStatus.ProgramName("✳ Claude Code"));
+
+        Assert.AreEqual(("Idle", AgentState.Idle), AgentStatus.Describe([("pwsh", AgentState.Idle)], null, null));
+        Assert.AreEqual(("Idle · Claude Code", AgentState.Idle), AgentStatus.Describe([("pwsh", AgentState.Idle), ("✳ Claude Code", AgentState.Idle)], null, null));
+        Assert.AreEqual(("Working · armux", AgentState.Working), AgentStatus.Describe([("◑ armux", AgentState.Working)], null, "done"));
+        Assert.AreEqual(("2 tabs working", AgentState.Working), AgentStatus.Describe([("◐ a", AgentState.Working), ("◓ b", AgentState.Working)], null, null));
+        Assert.AreEqual(("Needs input", AgentState.NeedsInput), AgentStatus.Describe([("◑ a", AgentState.Working)], "Needs input", null));
+        Assert.AreEqual(("Agent turn complete", AgentState.Idle), AgentStatus.Describe([("✳ a", AgentState.Idle)], null, "Agent turn complete"));
+    }
+
+    [TestMethod]
     public void AgentStateFromProgressAndClaudeTitles()
     {
         Assert.AreEqual(AgentState.Working, AgentStatus.FromProgress(3));

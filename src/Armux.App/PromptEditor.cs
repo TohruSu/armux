@@ -59,6 +59,21 @@ public sealed partial class PromptEditor : Grid
             PlaceholderText = "Write a prompt…",
         };
         ScrollViewer.SetVerticalScrollBarVisibility(box, ScrollBarVisibility.Auto);
+        // The default TextBox turns white-ish when focused; keep the editor's own color in every state.
+        var bg = Theme.Brush("Pane");
+        foreach (var key in new[] { "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused", "TextControlBackgroundDisabled" })
+            box.Resources[key] = bg;
+        foreach (var key in new[] { "TextControlForeground", "TextControlForegroundPointerOver", "TextControlForegroundFocused" })
+            box.Resources[key] = Theme.Brush("Text");
+        foreach (var key in new[] { "TextControlBorderBrush", "TextControlBorderBrushPointerOver" })
+            box.Resources[key] = Theme.Brush("Border");
+        box.Resources["TextControlBorderBrushFocused"] = Theme.Brush("Accent");
+        box.Resources["TextControlPlaceholderForeground"] = Theme.Brush("TextDim");
+        box.Resources["TextControlPlaceholderForegroundFocused"] = Theme.Brush("TextDim");
+        box.Resources["TextControlPlaceholderForegroundPointerOver"] = Theme.Brush("TextDim");
+        box.Background = bg;
+        box.Foreground = Theme.Brush("Text");
+        box.BorderBrush = Theme.Brush("Border");
         box.PreviewKeyDown += OnKey;
         SetRow(box, 1);
         Children.Add(box);

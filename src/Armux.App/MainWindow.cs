@@ -47,6 +47,28 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
     /// <summary>True while this window is the foreground window; toasts are only shown when it is not.</summary>
     public bool IsActiveWindow { get; private set; } = true;
 
+    readonly Viewbox zoomHost = new() { Stretch = Stretch.Fill };
+
+    void ApplyZoom(Windows.Foundation.Size size)
+    {
+        double k = Theme.Settings.Zoom;
+        if (size.Width <= 0 || size.Height <= 0) return;
+        root.Width = size.Width / k;
+        root.Height = size.Height / k;
+    }
+
+    /// <summary>Ctrl+= / Ctrl+- / Ctrl+0 and Ctrl+wheel: scale the whole window by 10% steps.</summary>
+    void ChangeZoom(int step)
+    {
+        double z = step == 0 ? 1.0 : Theme.Settings.Zoom + step * 0.1;
+        var s = (Theme.Settings with { Zoom = z }).Normalized();
+        if (s.Zoom == Theme.Settings.Zoom) return;
+        Theme.UseSettings(s);
+        try { Theme.Settings.Save(SettingsPath); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { App.Log(nameof(ChangeZoom), e); }
+        ApplyZoom(new Windows.Foundation.Size(zoomHost.ActualWidth, zoomHost.ActualHeight));
+    }
+
     public MainWindow(LaunchOptions opts)
     {
         this.opts = opts;
@@ -60,7 +82,11 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
 
         BuildChrome();
         RegisterCommands();
-        Content = root;
+        // App zoom (Ctrl+= / Ctrl+-): the content is laid out at window size / zoom and the Viewbox scales it back up
+        // to fill the window, so everything grows together. WinUI has no layout-affecting scale transform.
+        zoomHost.Child = root;
+        zoomHost.SizeChanged += (_, e) => ApplyZoom(e.NewSize);
+        Content = zoomHost;
         SetTitleBar(dragRegion);
 
         state.Workspaces.CollectionChanged += (_, _) => DispatcherQueue.TryEnqueue(RenderSidebar);
@@ -194,6 +220,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
     void UpdateBell()
     {
         UpdateTaskbar();
+        UpdateAllStatuses();
         int n = state.UnreadTotal;
         bellCount.Text = n > 99 ? "99+" : n.ToString();
         bellBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -387,7 +414,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
                 PanelKind.File => new FileView(surface),
                 _ => new TerminalView(SessionFor(surface))
                 {
-                    ZoomRequested = step => ChangeFontSize(step),
+                    ZoomRequested = step => ChangeZoom(step),
                     DropText = paths => DropText(surface, paths),
                 },
             };
@@ -600,6 +627,7 @@ public sealed partial class MainWindow : Window, IPaneHost, IExplorerHost
         if (opts.Select > 0 && opts.Select <= state.Workspaces.Count) SelectWorkspace(state.Workspaces[opts.Select - 1]);
         if (opts.Zoom) ToggleZoom();
         if (opts.Explorer) ToggleExplorer();
+        if (opts.PromptEditor) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, TogglePromptEditor);
         if (opts.Palette) OpenPalette();
         if (opts.Settings) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _ = OpenSettingsAsync());
         if (opts.Notifications) bellFlyout.ShowAt(bellButton);

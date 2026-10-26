@@ -47,7 +47,8 @@ public sealed partial class MainWindow
         s.Notified += n => OnTerminalNotification(surface, n);
         s.CwdChanged += path => OnTerminalCwd(surface, path);
         s.ProcessExited += _ => OnProcessExited(surface);
-        s.StateChanged += UpdateTaskbar;
+        s.StateChanged += () => { UpdateTaskbar(); UpdateStatus(surface); };
+        s.TitleUpdated += () => UpdateStatus(surface);
         // The bell is how Claude Code (and many programs) ask for attention when no OSC notification is configured.
         s.Bell += () => OnTerminalNotification(surface, new TermNotification("", "Needs your attention"));
         sessions[surface] = s;
@@ -183,6 +184,29 @@ public sealed partial class MainWindow
         var status = surfaces.Any(s => s.Unread) ? AgentState.NeedsInput
             : AgentStatus.Max(surfaces.Select(s => sessions.TryGetValue(s, out var t) ? t.State : AgentState.Idle));
         Taskbar.Show(WinRT.Interop.WindowNative.GetWindowHandle(this), status);
+    }
+
+    /// <summary>The sidebar status line and activity dot of the workspace holding <paramref name="surface"/>.</summary>
+    void UpdateStatus(Surface surface)
+    {
+        if (Locate(surface) is { } at) UpdateStatus(at.Ws);
+    }
+
+    /// <summary>Only workspaces with live terminals: mock workspaces keep their scripted status.</summary>
+    void UpdateStatus(Workspace ws)
+    {
+        var tabs = ws.Panes.SelectMany(p => p.Surfaces).Where(s => s.Live && sessions.ContainsKey(s))
+            .Select(s => (Title: sessions[s].RawTitle.Length > 0 ? sessions[s].RawTitle : s.Title, sessions[s].State)).ToList();
+        if (tabs.Count == 0) return;
+        var mine = state.Notifications.Where(n => ReferenceEquals(n.Workspace, ws)).ToList();
+        var (text, activity) = AgentStatus.Describe(tabs, mine.FirstOrDefault(n => !n.Read)?.Body, mine.FirstOrDefault()?.Body);
+        ws.Status = text;
+        ws.Activity = activity;
+    }
+
+    void UpdateAllStatuses()
+    {
+        foreach (var ws in state.Workspaces) UpdateStatus(ws);
     }
 
     /// <summary>

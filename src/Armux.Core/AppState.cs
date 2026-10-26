@@ -110,8 +110,13 @@ public sealed class AppState : Observable
     /// <summary>Latest unread notification (cmux ⌘⇧U), or null.</summary>
     public Notification? LatestUnread() => Notifications.FirstOrDefault(n => !n.Read);
 
-    void Recount(Workspace ws) =>
+    /// <summary>Unread count, and the "needs input" activity while anything in the workspace is unread.</summary>
+    void Recount(Workspace ws)
+    {
         ws.UnreadCount = Notifications.Count(n => !n.Read && ReferenceEquals(n.Workspace, ws));
+        if (ws.UnreadCount > 0) ws.Activity = AgentState.NeedsInput;
+        else if (ws.Activity == AgentState.NeedsInput) ws.Activity = AgentState.Idle;
+    }
 
     /// <summary>Pinned workspaces first, otherwise insertion order.</summary>
     public void SortPinned()

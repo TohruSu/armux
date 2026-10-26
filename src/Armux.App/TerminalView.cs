@@ -49,7 +49,7 @@ public sealed partial class TerminalView : UserControl
     (int Col, int Row) lastReported = (-1, -1);
 
     public TerminalSession Session => session;
-    /// <summary>Ctrl+wheel: +1 or -1 font size step.</summary>
+    /// <summary>Ctrl+wheel: +1 or -1 zoom step for the window.</summary>
     public Action<int>? ZoomRequested { get; set; }
     /// <summary>Text for a file dropped on the terminal (the window turns paths into relative, quoted text).</summary>
     public Func<IReadOnlyList<string>, string>? DropText { get; set; }
@@ -243,7 +243,7 @@ public sealed partial class TerminalView : UserControl
     {
         var term = session.Terminal;
         int y = term.ScrollbackCount + term.CursorY - viewTop;
-        bool visible = term.CursorVisible && session.Started && !session.Exited && y >= 0 && y < term.Rows;
+        bool visible = term.CursorVisible && session.Live && session.Started && !session.Exited && y >= 0 && y < term.Rows;
         cursor.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         if (!visible) return;
         Canvas.SetLeft(cursor, term.CursorX * cellW);

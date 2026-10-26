@@ -15,8 +15,10 @@ public sealed partial class SidebarRow : Grid
 {
     readonly Workspace ws;
     readonly AppState state;
-    readonly Border card = new() { CornerRadius = new CornerRadius(8), Padding = new Thickness(10, 7, 10, 8) };
-    readonly Rectangle rail = new() { Width = 3, RadiusX = 1.5, RadiusY = 1.5, Margin = new Thickness(0, 6, 0, 6), HorizontalAlignment = HorizontalAlignment.Left };
+    readonly Border card = new() { CornerRadius = new CornerRadius(8), Padding = new Thickness(12, 10, 12, 11), MinHeight = 64 };
+    readonly Rectangle rail = new() { Width = 3, RadiusX = 1.5, RadiusY = 1.5, Margin = new Thickness(0, 8, 0, 8), HorizontalAlignment = HorizontalAlignment.Left };
+    /// <summary>Activity dot before the status line: working, needs input, error, or idle.</summary>
+    readonly Ellipse dot = new() { Width = 7, Height = 7, Margin = new Thickness(0, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center };
     readonly Rectangle underline = new() { Height = 2, RadiusX = 1, RadiusY = 1, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(16, 0, 16, 0) };
     readonly Border badge = new() { MinWidth = 16, Height = 16, CornerRadius = new CornerRadius(8), Padding = new Thickness(4, 0, 4, 0), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock badgeText = new() { FontSize = 10.5, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -28,9 +30,9 @@ public sealed partial class SidebarRow : Grid
     {
         this.ws = ws;
         this.state = state;
-        Margin = new Thickness(8, 1, 8, 3);
+        Margin = new Thickness(8, 1, 8, 4);
 
-        title = Ui.Text("", 13, Theme.Brush("Text"), semibold: true);
+        title = Ui.Text("", 13.5, Theme.Brush("Text"), semibold: true);
         status = Ui.Text("", 12, Theme.Brush("TextDim"));
         status.TextWrapping = TextWrapping.Wrap;
         status.MaxLines = 2;
@@ -45,9 +47,18 @@ public sealed partial class SidebarRow : Grid
         head.Children.Add(title);
         head.Children.Add(pin);
 
-        var body = new StackPanel { Spacing = 1 };
+        var statusRow = new Grid();
+        statusRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        statusRow.ColumnDefinitions.Add(new ColumnDefinition());
+        dot.VerticalAlignment = VerticalAlignment.Top;
+        dot.Margin = new Thickness(1, 6, 7, 0);
+        statusRow.Children.Add(dot);
+        SetColumn(status, 1);
+        statusRow.Children.Add(status);
+
+        var body = new StackPanel { Spacing = 3 };
         body.Children.Add(head);
-        body.Children.Add(status);
+        body.Children.Add(statusRow);
         body.Children.Add(location);
         body.Children.Add(pr);
         card.Child = body;
@@ -75,6 +86,14 @@ public sealed partial class SidebarRow : Grid
         title.Text = ws.Title;
         status.Text = ws.Status;
         status.Visibility = string.IsNullOrEmpty(ws.Status) ? Visibility.Collapsed : Visibility.Visible;
+        dot.Visibility = status.Visibility;
+        dot.Fill = ws.Activity switch
+        {
+            AgentState.Working => Theme.Hex("#22C55E"),
+            AgentState.NeedsInput => Theme.Hex("#F59E0B"),
+            AgentState.Error => Theme.Hex("#EF4444"),
+            _ => Theme.Brush("TextFaint"),
+        };
         location.Text = string.IsNullOrEmpty(ws.Ports) ? ws.Location : $"{ws.Location}  {ws.Ports}";
         pr.Text = ws.Pr;
         pr.Visibility = ws.HasPr ? Visibility.Visible : Visibility.Collapsed;

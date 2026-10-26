@@ -111,19 +111,19 @@ public sealed partial class MainWindow
         Cmd("Copy", "Ctrl+Shift+C", () => FocusedTerminal()?.Copy());
         Cmd("Paste", "Ctrl+Shift+V", () => { if (FocusedTerminal() is { } t) _ = t.PasteAsync(); });
         Cmd("Settings…", "Ctrl+Shift+,", () => _ = OpenSettingsAsync());
-        // Ctrl+= / Ctrl+- / Ctrl+0 as in Windows Terminal and browsers (requested); the cmux-mapped Ctrl+Shift forms still work.
-        Cmd("Increase Font Size", "Ctrl+=", () => ChangeFontSize(1));
-        Cmd("Decrease Font Size", "Ctrl+-", () => ChangeFontSize(-1));
-        Cmd("Reset Font Size", "Ctrl+0", () => ChangeFontSize(0));
-        Key("Ctrl+Shift+=", () => ChangeFontSize(1));
-        Key("Ctrl+Shift+-", () => ChangeFontSize(-1));
-        Key("Ctrl+Shift+0", () => ChangeFontSize(0));
+        // Ctrl+= / Ctrl+- / Ctrl+0 zoom the whole window, as in browsers (requested). Terminal text alone: Ctrl+Shift.
+        Cmd("Zoom In", "Ctrl+=", () => ChangeZoom(1));
+        Cmd("Zoom Out", "Ctrl+-", () => ChangeZoom(-1));
+        Cmd("Reset Zoom", "Ctrl+0", () => ChangeZoom(0));
+        Cmd("Increase Terminal Font Size", "Ctrl+Shift+=", () => ChangeFontSize(1));
+        Cmd("Decrease Terminal Font Size", "Ctrl+Shift+-", () => ChangeFontSize(-1));
+        Cmd("Reset Terminal Font Size", "Ctrl+Shift+0", () => ChangeFontSize(0));
         Cmd("Prompt Editor", "Ctrl+G", TogglePromptEditor);
         Cmd("Theme: Dark", "", () => SetTheme(true));
         Cmd("Theme: Light", "", () => SetTheme(false));
         Cmd("Theme: Match Windows", "", () => SetTheme(new Windows.UI.ViewManagement.UISettings()
             .GetColorValue(Windows.UI.ViewManagement.UIColorType.Background).R < 128));
-        Cmd("New Window", "Ctrl+Alt+Shift+N", () => new MainWindow(opts with { Scenario = "idle", Palette = false, Notifications = false, Zoom = false, Menu = false, Colors = false, Explorer = false, Settings = false, Select = 0 }).Activate());
+        Cmd("New Window", "Ctrl+Alt+Shift+N", () => new MainWindow(opts with { Scenario = "idle", Palette = false, Notifications = false, Zoom = false, Menu = false, Colors = false, Explorer = false, Settings = false, PromptEditor = false, Select = 0 }).Activate());
         Cmd("Command Palette", "Ctrl+Shift+P", OpenPalette);
 
         root.PreviewKeyDown += OnKey;
