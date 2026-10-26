@@ -46,6 +46,7 @@ public sealed partial class TerminalView : UserControl
     bool follow = true, hasFocus, selecting;
     (int Line, int Col)? selA, selB;
     char highSurrogate;
+    bool keyDownSeen;
     int wheelAccum, reportButton = -1;
     (int Col, int Row) lastReported = (-1, -1);
 
@@ -526,6 +527,7 @@ public sealed partial class TerminalView : UserControl
 
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
+        keyDownSeen = true;
         bool shift = Down(VirtualKey.Shift), ctrl = Down(VirtualKey.Control), alt = Down(VirtualKey.Menu);
         if (e.Key == VirtualKey.Insert && shift && !ctrl) { _ = PasteAsync(); e.Handled = true; return; }
         TermKey? key = e.Key switch
@@ -546,6 +548,11 @@ public sealed partial class TerminalView : UserControl
     {
         char c = e.Character;
         e.Handled = true;
+        // A control character whose key went down elsewhere (Enter in a closing dialog, Esc closing
+        // the palette) arrives here after focus returns. Drop it so it doesn't reach the shell.
+        bool seen = keyDownSeen;
+        keyDownSeen = false;
+        if (!seen && c < ' ') return;
         // Backspace and Tab are sent from OnKeyDown.
         if (c is '\b' or '\t' or '\u007f') return;
         if (char.IsHighSurrogate(c)) { highSurrogate = c; return; }

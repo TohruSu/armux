@@ -15,4 +15,4 @@ obj/
 
 /publish/
 # A second build folder, so a running armux (publish/) can stay open while the next build is tried.
-/publish-next/
+/publish-*/
