@@ -14,11 +14,11 @@ BeforeAll {
         $bytes[1] = 0x5A
         [BitConverter]::GetBytes([int] $PeOffset).CopyTo($bytes, 0x3C)
         if ($PeOffset -ge 0 -and $PeOffset -le ($Size - 4)) {
-    [BitConverter]::GetBytes([uint32] 0x00004550).CopyTo($bytes, $PeOffset)
-}
-if ($PeOffset -ge 0 -and $PeOffset -le ($Size - 6)) {
-    [BitConverter]::GetBytes([uint16] $Machine).CopyTo($bytes, ($PeOffset + 4))
-}
+            [BitConverter]::GetBytes([uint32] 0x00004550).CopyTo($bytes, $PeOffset)
+        }
+        if ($PeOffset -ge 0 -and $PeOffset -le ($Size - 6)) {
+            [BitConverter]::GetBytes([uint16] $Machine).CopyTo($bytes, ($PeOffset + 4))
+        }
         [System.IO.File]::WriteAllBytes($FilePath, $bytes)
     }
 
